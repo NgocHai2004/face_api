@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Face Recognition API</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+  header { background: #1e293b; padding: 14px 28px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #334155; }
+  header h1 { font-size: 1.15rem; font-weight: 700; color: #f1f5f9; }
+
+  .tabs { display: flex; gap: 0; border-bottom: 2px solid #334155; background: #1e293b; }
+  .tab-btn { padding: 12px 28px; border: none; background: transparent; color: #94a3b8;
+             font-size: 0.9rem; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent;
+             transition: all .2s; margin-bottom: -2px; }
+  .tab-btn:hover { color: #e2e8f0; background: #0f172a22; }
+  .tab-btn.active { color: #60a5fa; border-bottom-color: #3b82f6; }
+
+  .tab-content { display: none; padding: 24px; max-width: 760px; }
+  .tab-content.active { display: block; }
+
+  .card { background: #1e293b; border-radius: 14px; padding: 24px; }
+  label { display: block; font-size: 0.74rem; color: #94a3b8; margin: 14px 0 5px;
+          font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  label:first-child { margin-top: 0; }
+  input[type=text] { width: 100%; padding: 9px 13px; border-radius: 8px;
+                     border: 1px solid #334155; background: #0f172a; color: #e2e8f0;
+                     font-size: 0.9rem; outline: none; transition: border .2s; }
+  input[type=text]:focus { border-color: #3b82f6; }
+  .hint { font-size: 0.74rem; color: #64748b; margin-top: 5px; }
+
+  .btn-row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  button { padding: 9px 20px; border-radius: 8px; border: none; cursor: pointer;
+           font-size: 0.88rem; font-weight: 600; transition: all .15s; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-green { background: #16a34a; color: #fff; }
+  .btn-green:hover:not(:disabled) { background: #15803d; }
+  .btn-red   { background: #dc2626; color: #fff; }
+  .btn-red:hover:not(:disabled)   { background: #b91c1c; }
+
+  /* ── Camera view ── */
+  .cam-wrap { position: relative; background: #000; border-radius: 12px;
+              overflow: hidden; margin-top: 14px; }
+  .cam-wrap img { display: block; width: 100%; border-radius: 12px; }
+  .cam-placeholder { height: 260px; display: flex; align-items: center;
+                     justify-content: center; color: #475569; font-size: 3rem; }
+
+  /* ── Step badges ── */
+  .steps { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  .step-badge { padding: 6px 18px; border-radius: 999px; font-size: 0.82rem;
+                font-weight: 700; background: #1e293b; color: #64748b;
+                border: 2px solid #334155; transition: all .3s; }
+  .step-badge.active { background: #1e3a5f; color: #93c5fd; border-color: #3b82f6;
+                       animation: pulse 1s infinite; }
+  .step-badge.done   { background: #166534; color: #86efac; border-color: #22c55e; }
+  .step-badge.fail   { background: #7f1d1d; color: #fca5a5; border-color: #ef4444; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+
+  /* ── User table ── */
+  .user-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 14px; }
+  .user-table th { background: #1e293b; color: #94a3b8; padding: 8px 12px; text-align: left;
+                   font-weight: 700; font-size: 0.75rem; letter-spacing:.05em; text-transform:uppercase; }
+  .user-table td { padding: 10px 12px; border-bottom: 1px solid #1e293b; vertical-align: middle; }
+  .user-table tr:hover td { background: #1e293b44; }
+  .btn-del { padding: 4px 12px; border-radius: 6px; border: none; background: #7f1d1d;
+             color: #fca5a5; font-size: 0.8rem; cursor: pointer; font-weight: 600; }
+  .btn-del:hover { background: #991b1b; }
+  .face-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
+
+  /* ── Progress bar ── */
+  .prog-wrap { background: #0f172a; border-radius: 8px; height: 10px;
+               overflow: hidden; margin-top: 10px; }
+  .prog-bar  { height: 100%; width: 0%; background: #16a34a; transition: width .15s; }
+
+  /* ── Info box ── */
+  .info-box { background: #0f172a; border-radius: 10px; padding: 12px 16px;
+              font-size: 0.84rem; font-family: monospace; line-height: 1.9;
+              border: 1px solid #334155; min-height: 54px; margin-top: 12px; }
+  .info-box.ok  { border-color: #22c55e; }
+  .info-box.err { border-color: #ef4444; }
+
+  /* ── Angle result cards ── */
+  .angle-cards { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .angle-card  { flex: 1; min-width: 120px; background: #0f172a; border-radius: 10px;
+                 padding: 12px; border: 2px solid #334155; text-align: center;
+                 font-size: 0.8rem; line-height: 1.8; }
+  .angle-card.ok  { border-color: #22c55e; }
+  .angle-card.err { border-color: #ef4444; }
+</style>
+</head>
+<body>
+
+<header>
+  <span style="font-size:1.4rem">🧠</span>
+  <h1>Face Recognition API</h1>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab(event,'enroll')">🎯 Đăng ký 3 góc</button>
+  <button class="tab-btn"        onclick="switchTab(event,'verify')">🔍 Xác thực 3 góc</button>
+  <button class="tab-btn"        onclick="switchTab(event,'users');loadUsers()">👥 Quản lý User</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     TAB 1 — ĐĂNG KÝ 3 GÓC
+     THẲNG → TRÁI → PHẢI, mỗi góc giữ 1.5s
+══════════════════════════════════════════════════════════ -->
+<div id="tab-enroll" class="tab-content active">
+  <div class="card">
+
+    <!-- Bước 0: Nhập username + kiểm tra DB -->
+    <div id="en-step0">
+      <label>Tên người dùng</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="en-username" placeholder="VD: nguyen_van_a"
+               style="flex:1" onkeydown="if(event.key==='Enter')checkOrCreateUser()" />
+        <button class="btn-green" onclick="checkOrCreateUser()" style="white-space:nowrap">✅ Xác nhận</button>
+      </div>
+      <p class="hint">Nhập tên → nhấn Xác nhận để kiểm tra DB trước khi chụp ảnh.</p>
+      <div class="info-box" id="en-check-info"></div>
+    </div>
+
+    <!-- Bước 1-3: chụp ảnh (ẩn cho đến khi user hợp lệ) -->
+    <div id="en-capture-section" style="display:none;margin-top:14px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <label style="margin:0">Camera source</label>
+        <input type="text" id="en-source" value="0" style="width:120px" />
+        <span id="en-user-badge"
+              style="background:#1e3a5f;color:#7dd3fc;padding:3px 10px;border-radius:20px;font-size:.8rem"></span>
+      </div>
+
+      <p class="hint">
+        Chụp riêng từng góc. Hệ thống tự kiểm tra hướng mặt.<br>
+        Phải đủ <b>3 góc hợp lệ</b> mới nhấn <b>💾 Lưu</b>.
+      </p>
+
+      <!-- Trạng thái 3 góc -->
+      <div class="steps" style="display:flex;margin-bottom:14px">
+        <div class="step-badge" id="en-s-THANG">⬜ THẲNG</div>
+        <div class="step-badge" id="en-s-TRAI" >⬜ TRÁI</div>
+        <div class="step-badge" id="en-s-PHAI" >⬜ PHẢI</div>
+      </div>
+
+      <!-- Nút chụp từng góc -->
+      <div class="btn-row" style="flex-wrap:wrap;gap:8px">
+        <button class="btn-green" onclick="captureAngle('THANG')">📸 Chụp THẲNG</button>
+        <button class="btn-green" onclick="captureAngle('TRAI')">📸 Chụp TRÁI</button>
+        <button class="btn-green" onclick="captureAngle('PHAI')">📸 Chụp PHẢI</button>
+        <button class="btn-green" id="en-save" onclick="enrollSave()" disabled
+                style="background:#1d4ed8;border-color:#3b82f6">💾 Lưu đăng ký</button>
+        <button class="btn-red" onclick="enrollReset()">🔄 Reset</button>
+      </div>
+
+      <!-- Preview live + crop từng góc -->
+      <div style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap">
+        <div style="flex:1;min-width:220px">
+          <div style="font-size:.75rem;color:#64748b;margin-bottom:6px">📷 Ảnh vừa chụp</div>
+          <div class="cam-wrap" style="margin:0">
+            <div class="cam-placeholder" id="en-ph">📸</div>
+            <img id="en-frame" style="display:none;width:100%" alt="frame" />
+          </div>
+        </div>
+        <div style="flex:2;min-width:240px">
+          <div style="font-size:.75rem;color:#64748b;margin-bottom:6px">✂️ Khuôn mặt đã cắt (3 góc)</div>
+          <div class="angle-cards" style="display:flex;gap:8px">
+            <div class="angle-card" id="en-c-THANG"><b>THẲNG</b><br>—</div>
+            <div class="angle-card" id="en-c-TRAI" ><b>TRÁI</b><br>—</div>
+            <div class="angle-card" id="en-c-PHAI" ><b>PHẢI</b><br>—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-box" id="en-info" style="margin-top:12px"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     TAB 2 — XÁC THỰC 3 GÓC
+     TRÁI → THẲNG → PHẢI, mỗi góc giữ 1s
+══════════════════════════════════════════════════════════ -->
+<div id="tab-verify" class="tab-content">
+  <div class="card">
+    <label>Camera source</label>
+    <input type="text" id="vr-source" placeholder="0 = webcam, hoặc RTSP URL" value="0" />
+    <label>Username (tùy chọn — để trống = tìm toàn bộ DB)</label>
+    <input type="text" id="vr-username" placeholder="VD: nguyen_van_a" />
+    <p class="hint">Xác thực lần lượt 3 góc: TRÁI → THẲNG → PHẢI, mỗi góc giữ 1 giây</p>
+
+    <div class="btn-row">
+      <button class="btn-green" id="vr-start" onclick="startVerify()">🔍 Bắt đầu xác thực</button>
+      <button class="btn-red"   id="vr-stop"  onclick="stopVerify()" disabled>⏹ Huỷ</button>
+    </div>
+
+    <div class="steps" id="vr-steps" style="display:none">
+      <div class="step-badge" id="vr-s-TRAI" >⬜ TRÁI</div>
+      <div class="step-badge" id="vr-s-THANG">⬜ THẲNG</div>
+      <div class="step-badge" id="vr-s-PHAI" >⬜ PHẢI</div>
+    </div>
+
+    <div class="cam-wrap">
+      <div class="cam-placeholder" id="vr-ph">🔍</div>
+      <img id="vr-frame" style="display:none" alt="verify frame" />
+    </div>
+
+    <!-- Angle result cards -->
+    <div class="angle-cards" id="vr-cards" style="display:none">
+      <div class="angle-card" id="vr-c-TRAI" ><b>TRÁI</b><br>—</div>
+      <div class="angle-card" id="vr-c-THANG"><b>THẲNG</b><br>—</div>
+      <div class="angle-card" id="vr-c-PHAI" ><b>PHẢI</b><br>—</div>
+    </div>
+
+    <div class="info-box" id="vr-info"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     TAB 3 — QUẢN LÝ USER
+══════════════════════════════════════════════════════════ -->
+<div id="tab-users" class="tab-content">
+
+  <!-- Modal sửa user -->
+  <div id="edit-modal" style="display:none;position:fixed;inset:0;background:#000a;z-index:999;display:none;align-items:center;justify-content:center">
+    <div style="background:#1e293b;border-radius:14px;padding:28px;min-width:320px;max-width:400px;width:90%">
+      <h3 style="margin:0 0 16px;font-size:1.1rem">✏️ Sửa người dùng: <span id="edit-username-label" style="color:#60a5fa"></span></h3>
+      <label style="font-size:.8rem;color:#94a3b8">Tên mới</label>
+      <input id="edit-new-username" type="text" placeholder="Để trống nếu không đổi tên"
+             style="width:100%;padding:8px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;margin:6px 0 14px;box-sizing:border-box"/>
+      <label style="font-size:.8rem;color:#94a3b8">Ảnh khuôn mặt mới</label>
+      <input id="edit-face-file" type="file" accept="image/*"
+             style="width:100%;margin:6px 0 18px;color:#94a3b8"/>
+      <div id="edit-preview" style="text-align:center;margin-bottom:12px"></div>
+      <div class="btn-row">
+        <button class="btn-green" onclick="submitEditUser()">💾 Lưu</button>
+        <button class="btn-red"   onclick="closeEditModal()">✖ Huỷ</button>
+      </div>
+      <div id="edit-info" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="btn-row">
+      <button class="btn-green" onclick="loadUsers()">🔄 Tải lại</button>
+      <button class="btn-red"   onclick="deleteAllUsers()">🗑 Xóa tất cả</button>
+    </div>
+    <table class="user-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Username</th>
+          <th>Khuôn mặt</th>
+          <th>Ngày tạo</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="user-tbody">
+        <tr><td colspan="5" style="color:#64748b;padding:16px">Nhấn 🔄 để tải danh sách</td></tr>
+      </tbody>
+    </table>
+    <div class="info-box" id="users-info" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<script>
+  // ── Tabs ─────────────────────────────────────────────────
+  function switchTab(e, name) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    e.target.classList.add('active');
+  }
+
+  const LABEL = { THANG: 'THẲNG', TRAI: 'TRÁI', PHAI: 'PHẢI' };
+
+  // ══════════════════════════════════════════════════════════
+  // ĐĂNG KÝ THỦ CÔNG — chụp từng góc riêng lẻ
+  // ══════════════════════════════════════════════════════════
+  const ANGLE_LABELS_VI = { THANG: 'Thẳng', TRAI: 'Trái', PHAI: 'Phải' };
+
+  // ── Bước 0: Kiểm tra / tạo user ────────────────────────────
+  async function checkOrCreateUser() {
+    const username = document.getElementById('en-username').value.trim();
+    if (!username) { alert('Nhập tên người dùng'); return; }
+
+    const infoEl = document.getElementById('en-check-info');
+    infoEl.textContent = '⏳ Đang kiểm tra...';
+    infoEl.className   = 'info-box';
+
+    // Gọi 1 API duy nhất — tự kiểm tra & tạo nếu chưa có
+    const res  = await fetch(`/enroll/init-user?username=${encodeURIComponent(username)}`, { method: 'POST' });
+    const data = await res.json();
+
+    if (!res.ok) {
+      infoEl.textContent = `❌ Lỗi: ${data.detail || 'Không thể khởi tạo user'}`;
+      infoEl.className   = 'info-box err';
+      return;
+    }
+
+    infoEl.innerHTML = data.created
+      ? `✅ Đã tạo user <b>${username}</b>. Hãy chụp 3 góc khuôn mặt.`
+      : (data.has_face
+          ? `ℹ️ <b>${username}</b> đã có khuôn mặt. Chụp lại để cập nhật.`
+          : `ℹ️ <b>${username}</b> đã tồn tại, chưa có khuôn mặt. Hãy chụp 3 góc.`);
+    infoEl.className = 'info-box ok';
+    showCaptureSection(username);
+  }
+
+  function showCaptureSection(username) {
+    document.getElementById('en-capture-section').style.display = 'block';
+    document.getElementById('en-user-badge').textContent = '👤 ' + username;
+    document.getElementById('en-username').disabled = true;
+  }
+
+  async function captureAngle(angle) {
+    const username = document.getElementById('en-username').value.trim();
+    const source   = document.getElementById('en-source').value.trim() || '1';
+    if (!username) { alert('Nhập tên người dùng trước'); return; }
+
+    // Hiện loading trên badge
+    setBadge('en-s-'+angle, 'active', '⏳ '+ANGLE_LABELS_VI[angle]);
+    setEnrollInfo('⏳ Đang chụp góc ' + ANGLE_LABELS_VI[angle] + '...', '');
+
+    const res = await fetch(
+      `/enroll/capture/${angle.toLowerCase()}?username=${encodeURIComponent(username)}&source=${encodeURIComponent(source)}`,
+      { method: 'POST' }
+    );
+    const d = await res.json();
+
+    // Hiển thị frame
+    const frameEl = document.getElementById('en-frame');
+    const phEl    = document.getElementById('en-ph');
+    if (d.frame_b64) {
+      frameEl.src = 'data:image/jpeg;base64,' + d.frame_b64;
+      frameEl.style.display = 'block';
+      phEl.style.display = 'none';
+    }
+
+    // Cập nhật card khuôn mặt
+    const card = document.getElementById('en-c-'+angle);
+    if (d.success && d.face_crop_b64) {
+      card.className = 'angle-card ok';
+      card.innerHTML = `<b>${ANGLE_LABELS_VI[angle]}</b><br>
+        <img src="data:image/jpeg;base64,${d.face_crop_b64}"
+             style="width:100%;border-radius:6px;margin:4px 0"/>
+        <span style="color:#4ade80;font-size:.75rem">✅ Hợp lệ</span>`;
+    } else if (!d.success) {
+      card.className = 'angle-card err';
+      card.innerHTML = `<b>${ANGLE_LABELS_VI[angle]}</b><br>
+        ${d.face_crop_b64
+          ? `<img src="data:image/jpeg;base64,${d.face_crop_b64}"
+                  style="width:100%;border-radius:6px;margin:4px 0"/>`
+          : '<span style="font-size:1.5rem">❓</span>'}<br>
+        <span style="color:#f87171;font-size:.72rem">
+          ${d.detected_angle ? 'Phát hiện: '+ANGLE_LABELS_VI[d.detected_angle] : 'Không thấy mặt'}
+        </span>`;
+    }
+
+    // Badge
+    if (d.success) {
+      setBadge('en-s-'+angle, 'done', '✅ ' + ANGLE_LABELS_VI[angle]);
+    } else {
+      setBadge('en-s-'+angle, 'fail', '❌ ' + ANGLE_LABELS_VI[angle]);
+    }
+
+    // Info message
+    setEnrollInfo(d.message || '', d.success ? 'ok' : 'err');
+
+    // Kích hoạt nút Lưu khi đủ 3 góc
+    if (d.session) {
+      const allDone = Object.values(d.session).every(v => v === true);
+      document.getElementById('en-save').disabled = !allDone;
+      if (allDone) setEnrollInfo('🎉 Đủ 3 góc! Nhấn 💾 Lưu để hoàn tất đăng ký.', 'ok');
+    }
+  }
+
+  async function enrollSave() {
+    const username = document.getElementById('en-username').value.trim();
+    if (!username) return;
+    setEnrollInfo('⏳ Đang lưu vào database...', '');
+    const res = await fetch(`/enroll/save?username=${encodeURIComponent(username)}`, { method: 'POST' });
+    const d = await res.json();
+    setEnrollInfo(d.message || (res.ok ? '✅ Lưu thành công' : '❌ Lỗi'), res.ok ? 'ok' : 'err');
+    if (res.ok) {
+      // Reset UI
+      setTimeout(() => enrollReset(false), 800);
+    }
+  }
+
+  async function enrollReset(clearName = true) {
+    const username = document.getElementById('en-username').value.trim();
+    if (username) await fetch(`/enroll/reset?username=${encodeURIComponent(username)}`, { method: 'DELETE' });
+
+    // Reset badges + cards
+    ['THANG','TRAI','PHAI'].forEach(a => {
+      setBadge('en-s-'+a, 'pending', '⬜ '+ANGLE_LABELS_VI[a]);
+      const card = document.getElementById('en-c-'+a);
+      card.className = 'angle-card';
+      card.innerHTML = `<b>${ANGLE_LABELS_VI[a]}</b><br>—`;
+    });
+    document.getElementById('en-frame').style.display = 'none';
+    document.getElementById('en-ph').style.display = 'block';
+    document.getElementById('en-save').disabled = true;
+    setEnrollInfo('', '');
+
+    // Ẩn section chụp, mở lại bước 0
+    document.getElementById('en-capture-section').style.display = 'none';
+    const usernameEl = document.getElementById('en-username');
+    usernameEl.disabled = false;
+    document.getElementById('en-user-badge').textContent = '';
+    const checkInfo = document.getElementById('en-check-info');
+    checkInfo.textContent = '';
+    checkInfo.className   = 'info-box';
+    if (clearName) usernameEl.value = '';
+  }
+
+  function setEnrollInfo(msg, cls) {
+    const el = document.getElementById('en-info');
+    el.textContent = msg;
+    el.className   = 'info-box' + (cls ? ' '+cls : '');
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // XÁC THỰC 3 GÓC
+  // ══════════════════════════════════════════════════════════
+  let verifyES = null;
+
+  function startVerify() {
+    const source   = document.getElementById('vr-source').value.trim() || '0';
+    const username = document.getElementById('vr-username').value.trim();
+
+    if (verifyES) { verifyES.close(); verifyES = null; }
+
+    // Reset UI
+    ['TRAI','THANG','PHAI'].forEach(a => {
+      setBadge('vr-s-'+a, 'pending', '⬜ '+LABEL[a]);
+      const c = document.getElementById('vr-c-'+a);
+      c.className = 'angle-card'; c.innerHTML = `<b>${LABEL[a]}</b><br>—`;
+    });
+    document.getElementById('vr-steps').style.display = 'flex';
+    document.getElementById('vr-cards').style.display = 'flex';
+    document.getElementById('vr-ph').style.display = 'none';
+    document.getElementById('vr-frame').style.display = 'block';
+    document.getElementById('vr-info').textContent = '⏳ Đang kết nối...';
+    document.getElementById('vr-info').className = 'info-box';
+    document.getElementById('vr-start').disabled = true;
+    document.getElementById('vr-stop').disabled = false;
+
+    let url = `/verify3?source=${encodeURIComponent(source)}`;
+    if (username) url += `&username=${encodeURIComponent(username)}`;
+    verifyES = new EventSource(url);
+
+    verifyES.onmessage = function(e) {
+      const d = JSON.parse(e.data);
+
+      if (d.error) {
+        document.getElementById('vr-info').textContent = '❌ ' + d.error;
+        document.getElementById('vr-info').className = 'info-box err';
+        onVerifyDone(); return;
+      }
+
+      if (d.frame_b64) document.getElementById('vr-frame').src = 'data:image/jpeg;base64,' + d.frame_b64;
+
+      // Retry — score < 0.6, chưa chuyển góc
+      if (d.retry) {
+        setBadge('vr-s-'+d.required_angle, 'active', '⚠️ '+LABEL[d.required_angle]+' ('+d.score+')');
+        document.getElementById('vr-info').textContent = d.message || '';
+        document.getElementById('vr-info').className = 'info-box';
+        return;
+      }
+
+      // Step badge
+      if (d.captured) {
+        const res = d.angle_result;
+        setBadge('vr-s-'+d.captured, res.matched ? 'done' : 'fail',
+                 (res.matched ? '✅' : '❌') + ' ' + LABEL[d.captured]);
+        // Angle card with face crop
+        const card = document.getElementById('vr-c-'+d.captured);
+        card.className = 'angle-card ' + (res.matched ? 'ok' : 'err');
+        const cropImg = d.face_crop_b64
+          ? `<img src="data:image/jpeg;base64,${d.face_crop_b64}" style="width:100%;border-radius:6px;margin:6px 0"/>`
+          : '';
+        card.innerHTML = `<b>${LABEL[d.captured]}</b><br>${cropImg}` +
+          (res.matched ? `✅ ${res.username}` : '❌ Không khớp') +
+          `<br><span style="color:#94a3b8">${res.score}</span>`;
+      } else if (d.required_angle && !d.done) {
+        setBadge('vr-s-'+d.required_angle, 'active', '🔵 '+LABEL[d.required_angle]);
+      }
+
+      if (d.done) {
+        const ok = d.matched;
+        document.getElementById('vr-info').innerHTML = ok
+          ? `✅ <b>Xác thực thành công!</b><br>👤 ${d.username} — Score TB: ${d.final_score}`
+          : `❌ <b>Xác thực thất bại</b> — không khớp đủ 2/3 góc`;
+        document.getElementById('vr-info').className = 'info-box ' + (ok ? 'ok' : 'err');
+        verifyES.close(); verifyES = null;
+        onVerifyDone(); return;
+      }
+
+      document.getElementById('vr-info').textContent = d.message || '';
+    };
+
+    verifyES.onerror = function() {
+      document.getElementById('vr-info').textContent = '❌ Mất kết nối camera';
+      document.getElementById('vr-info').className = 'info-box err';
+      onVerifyDone();
+    };
+  }
+
+  function stopVerify() {
+    if (verifyES) { verifyES.close(); verifyES = null; }
+    document.getElementById('vr-info').textContent = '⏹ Đã huỷ';
+    onVerifyDone();
+  }
+
+  function onVerifyDone() {
+    document.getElementById('vr-start').disabled = false;
+    document.getElementById('vr-stop').disabled = true;
+  }
+
+  // ── Helpers ──────────────────────────────────────────────
+  function setBadge(id, state, text) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.className = 'step-badge ' + (state === 'pending' ? '' : state);
+    el.textContent = text;
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // QUẢN LÝ USER
+  // ══════════════════════════════════════════════════════════
+  async function loadUsers() {
+    const tbody = document.getElementById('user-tbody');
+    tbody.innerHTML = '<tr><td colspan="5" style="color:#64748b;padding:16px">⏳ Đang tải...</td></tr>';
+    try {
+      const res = await fetch('/users');
+      const users = await res.json();
+      if (!users.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="color:#64748b;padding:16px">Chưa có người dùng nào</td></tr>';
+        return;
+      }
+      tbody.innerHTML = users.map(u => `
+        <tr>
+          <td>${u.id}</td>
+          <td><b>${u.username}</b></td>
+          <td>
+            <span class="face-dot" style="background:${u.has_face ? '#22c55e' : '#ef4444'}"></span>
+            ${u.has_face ? '✅ Có' : '❌ Chưa'}
+          </td>
+          <td style="color:#64748b;font-size:0.78rem">${u.created_at ? u.created_at.replace('T',' ').substring(0,19) : '—'}</td>
+          <td style="display:flex;gap:6px">
+            <button class="btn-green" style="padding:4px 10px;font-size:.8rem" onclick="openEditModal('${u.username}')">✏️ Sửa</button>
+            <button class="btn-del" onclick="deleteUser('${u.username}')">🗑 Xóa</button>
+          </td>
+        </tr>`).join('');
+    } catch(e) {
+      tbody.innerHTML = `<tr><td colspan="5" style="color:#ef4444">Lỗi: ${e}</td></tr>`;
+    }
+  }
+
+  async function deleteUser(username) {
+    if (!confirm(`Xóa người dùng "${username}"?`)) return;
+    const res = await fetch(`/users/${encodeURIComponent(username)}`, { method: 'DELETE' });
+    const d = await res.json();
+    document.getElementById('users-info').textContent = res.ok ? `✅ ${d.message}` : `❌ ${d.detail}`;
+    document.getElementById('users-info').className = 'info-box ' + (res.ok ? 'ok' : 'err');
+    loadUsers();
+  }
+
+  async function deleteAllUsers() {
+    if (!confirm('Xóa TẤT CẢ người dùng? Hành động này không thể hoàn tác!')) return;
+    const res = await fetch('/users', { method: 'DELETE' });
+    const d = await res.json();
+    document.getElementById('users-info').textContent = res.ok ? `✅ ${d.message}` : `❌ ${d.detail}`;
+    document.getElementById('users-info').className = 'info-box ' + (res.ok ? 'ok' : 'err');
+    loadUsers();
+  }
+
+  // ── Edit modal ───────────────────────────────────────────────
+  let _editUsername = null;
+
+  function openEditModal(username) {
+    _editUsername = username;
+    document.getElementById('edit-username-label').textContent = username;
+    document.getElementById('edit-new-username').value = '';
+    document.getElementById('edit-face-file').value = '';
+    document.getElementById('edit-preview').innerHTML = '';
+    document.getElementById('edit-info').textContent = '';
+    document.getElementById('edit-modal').style.display = 'flex';
+  }
+
+  function closeEditModal() {
+    document.getElementById('edit-modal').style.display = 'none';
+    _editUsername = null;
+  }
+
+  // Preview ảnh trước khi upload
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('edit-face-file').addEventListener('change', function() {
+      const f = this.files[0];
+      if (!f) { document.getElementById('edit-preview').innerHTML = ''; return; }
+      const reader = new FileReader();
+      reader.onload = e => {
+        document.getElementById('edit-preview').innerHTML =
+          `<img src="${e.target.result}" style="max-height:120px;border-radius:8px;border:2px solid #334155"/>`;
+      };
+      reader.readAsDataURL(f);
+    });
+  });
+
+  async function submitEditUser() {
+    if (!_editUsername) return;
+    const newName  = document.getElementById('edit-new-username').value.trim();
+    const fileInput = document.getElementById('edit-face-file');
+    const file = fileInput.files[0];
+
+    if (!newName && !file) {
+      document.getElementById('edit-info').textContent = '⚠️ Nhập tên mới hoặc chọn ảnh';
+      return;
+    }
+
+    const form = new FormData();
+    if (file) form.append('face_image', file);
+
+    let url = `/users/${encodeURIComponent(_editUsername)}`;
+    if (newName) url += `?new_username=${encodeURIComponent(newName)}`;
+
+    const res = await fetch(url, { method: 'PATCH', body: file ? form : null });
+    const d = await res.json();
+    const info = document.getElementById('edit-info');
+    info.textContent = res.ok ? `✅ ${d.message}` : `❌ ${d.detail || JSON.stringify(d)}`;
+    info.style.color = res.ok ? '#4ade80' : '#f87171';
+
+    if (res.ok) {
+      setTimeout(() => { closeEditModal(); loadUsers(); }, 800);
+    }
+  }
+</script>
+</body>
+</html>

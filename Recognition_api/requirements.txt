@@ -1,0 +1,19 @@
+fastapi>=0.111.0
+gradio>=4.0.0
+pydantic-settings>=2.2.1
+uvicorn[standard]>=0.29.0
+python-dotenv>=1.0.1
+insightface==0.7.3
+onnxruntime>=1.20.0
+# onnx wheel ARM: dùng bản mới nhất có sẵn trên piwheels, bỏ ml_dtypes constraint
+onnx>=1.17.0
+ml_dtypes>=0.4.0
+opencv-python-headless>=4.8.0
+numpy>=1.26.0,<2.0.0
+sqlalchemy>=2.0.36
+passlib[bcrypt]>=1.7.4
+python-jose[cryptography]>=3.3.0
+python-multipart>=0.0.9
+Pillow>=10.4.0
+aiofiles>=23.2.1
+websockets>=12.0

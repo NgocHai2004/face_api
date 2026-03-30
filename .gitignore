@@ -1,0 +1,87 @@
+# ══════════════════════════════════════════════════════════════
+#  Root .gitignore – recognition_face monorepo
+# ══════════════════════════════════════════════════════════════
+
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environment ───────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Environment / secrets ─────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Database ──────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Face images (user data – PII) ────────────────────────────
+Recognition_api/face_images/
+
+# ── SSL / TLS certificates & keys ────────────────────────────
+ssl/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ── ML model cache ────────────────────────────────────────────
+*.onnx
+models/
+~/.insightface/
+
+# ── Node / Frontend ───────────────────────────────────────────
+node_modules/
+App_center/frontend/dist/
+App_center/frontend/dist-ssr/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── OS ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE / Editor ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── Pytest / coverage ─────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Misc artefacts ────────────────────────────────────────────
+patch_onnx.py
+=4.0.0
