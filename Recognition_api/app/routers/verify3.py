@@ -1,39 +1,37 @@
 """
 app/routers/verify3.py
 
-SSE endpoint xác thực khuôn mặt 3 góc:
+SSE endpoint xác thực khuôn mặt liên tục:
   GET /verify3?source=0[&username=alice]
 
-Flow: TRAI → THANG → PHAI
-  Mỗi 1 giây: lấy 1 snapshot → detect hướng → nếu đúng chạy InsightFace → chuyển góc
-  Kết quả tổng hợp: cần ≥ 2/3 góc khớp
+Flow:
+  - Mỗi 1 giây: chụp frame → detect mặt
+  - Có người + score >= threshold  → bắn verify_matched   + push socket
+  - Có người + score <  threshold  → bắn verify_unmatched + push socket
+  - Không có người (faces=[])      → bắn verify_no_face   (không push socket)
 """
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 import cv2
 import asyncio
 import base64
-import time
-import numpy as np
 import json
 from typing import Optional
-from sqlalchemy.orm import Session
+from datetime import datetime
 
-from app.database import get_db, User
+from app.database import User
 from app.face_utils import (
-    extract_embedding_from_image,
     embedding_from_faces,
     bytes_to_embedding, verify_faces,
 )
-from app.face_direction import get_face_direction
 from app.rtsp_utils import _parse_source, fetch_snapshot_from_url
 from app.config import settings
 from app.ws_producer import push_event_async
-from datetime import datetime
 
 router = APIRouter()
 
-VERIFY_ANGLES = ["TRAI", "THANG", "PHAI"]
+MATCH_THRESHOLD = 0.6   # score tối thiểu để xác thực thành công
+SCAN_INTERVAL   = 1.0   # giây giữa mỗi lần quét
 
 
 def _event(data: dict) -> str:
@@ -59,14 +57,52 @@ def _get_frame_fn(src):
     return lambda: (lambda ret, f: f if ret else None)(*cap.read()), cap
 
 
-async def _verify3_generator(source: str, username: Optional[str], db: Session):
+def _detect_and_match(frame, users, model):
+    """
+    Detect mặt trong frame → so sánh với tất cả users.
+    Trả về (best_user, best_score, face_crop_b64) hoặc (None, 0.0, None).
+    """
+    faces = model.get(frame)
+    if not faces:
+        return None, 0.0, None
+
+    # Chọn mặt lớn nhất
+    face = max(faces, key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]))
+
+    # Lấy embedding
+    embedding, face_crop = embedding_from_faces(frame, [face])
+    if embedding is None:
+        return None, 0.0, None
+
+    # So sánh với DB
+    best_score = 0.0
+    best_user  = None
+    for u in users:
+        stored = bytes_to_embedding(u.face_embedding)
+        _, score = verify_faces(stored, embedding)
+        if score > best_score:
+            best_score = score
+            best_user  = u
+
+    # Crop face base64
+    face_crop_b64 = None
+    if face_crop is not None and face_crop.size > 0:
+        _, crop_buf = cv2.imencode(".jpg", face_crop, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        face_crop_b64 = base64.b64encode(crop_buf.tobytes()).decode()
+
+    return best_user, round(best_score, 4), face_crop_b64
+
+
+async def _verify_generator(source: str, username: Optional[str]):
+    from app.face_utils import get_face_model
+
     src = _parse_source(source)
 
-    # Load users
-    query = db.query(User).filter(User.face_embedding.isnot(None))
+    # Load users từ MongoDB
+    query = User.find(User.face_embedding_b64 != None)  # noqa: E711
     if username:
-        query = query.filter(User.username == username)
-    users = query.all()
+        query = User.find(User.username == username, User.face_embedding_b64 != None)  # noqa: E711
+    users = await query.to_list()
 
     if not users:
         yield _event({"error": "Không có khuôn mặt nào trong DB. Hãy đăng ký trước."})
@@ -77,146 +113,73 @@ async def _verify3_generator(source: str, username: Optional[str], db: Session):
         yield _event({"error": f"Không mở được source: {source}"})
         return
 
-    angle_results: dict[str, dict] = {}
+    model = get_face_model()
 
     try:
-        for angle_idx, required in enumerate(VERIFY_ANGLES):
-            # Thông báo bắt đầu góc mới
-            yield _event({
-                "step": angle_idx + 1,
-                "total_steps": len(VERIFY_ANGLES),
-                "required_angle": required,
-                "done": False,
-                "message": f"Bước {angle_idx+1}/3 — Hãy quay mặt: {required}",
-            })
+        while True:
+            await asyncio.sleep(SCAN_INTERVAL)
 
-            # Vòng lặp 1fps cho góc này
-            while True:
-                await asyncio.sleep(1.0)  # 1s/lần
+            frame = get_frame()
+            if frame is None:
+                continue  # không có frame → im lặng, thử lại
 
-                frame = get_frame()
-                if frame is None:
-                    yield _event({"step": angle_idx+1, "done": False,
-                                  "message": "⚠️ Không lấy được frame, thử lại..."})
-                    continue
+            # ── Detect + match ───────────────────────────────────────
+            best_user, best_score, face_crop_b64 = _detect_and_match(frame, users, model)
 
-                # Detect hướng (YuNet ~10-20ms)
-                result = get_face_direction(frame)
-                direction = result["direction"]
-                annotated = result["annotated_frame"]
-
-                # Encode preview frame
-                cv2.putText(annotated, f"Buoc {angle_idx+1}/3: Quay mat {required}",
-                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2)
-                _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 65])
-                frame_b64 = base64.b64encode(buf.tobytes()).decode()
-
-                if direction != required:
-                    # Sai hướng → gửi preview, chờ 1s tiếp
-                    yield _event({
-                        "step": angle_idx + 1,
-                        "total_steps": len(VERIFY_ANGLES),
-                        "required_angle": required,
-                        "direction": direction,
-                        "frame_b64": frame_b64,
-                        "done": False,
-                        "message": f"Bước {angle_idx+1}/3 — Cần: {required}, đang: {direction or 'chưa rõ'}",
-                    })
-                    continue
-
-                # Đúng hướng → tái sử dụng kết quả InsightFace từ get_face_direction (tránh gọi 2 lần)
-                embedding, face_crop = embedding_from_faces(frame, result.get("_faces", []))
-                best_score = 0.0
-                best_user = None
-                matched = False
-
-                if embedding is not None:
-                    for u in users:
-                        stored = bytes_to_embedding(u.face_embedding)
-                        _, score = verify_faces(stored, embedding)
-                        if score > best_score:
-                            best_score = score
-                            best_user = u
-                    matched = best_score >= settings.FACE_THRESHOLD
-
-                # Encode crop
-                face_crop_b64 = None
-                if face_crop is not None and face_crop.size > 0:
-                    _, crop_buf = cv2.imencode(".jpg", face_crop, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                    face_crop_b64 = base64.b64encode(crop_buf.tobytes()).decode()
-
-                ANGLE_PASS_THRESHOLD = 0.6
-                if best_score < ANGLE_PASS_THRESHOLD:
-                    yield _event({
-                        "step": angle_idx + 1,
-                        "total_steps": len(VERIFY_ANGLES),
-                        "required_angle": required,
-                        "direction": direction,
-                        "frame_b64": frame_b64,
-                        "face_crop_b64": face_crop_b64,
-                        "done": False,
-                        "score": round(best_score, 4),
-                        "retry": True,
-                        "message": f"⚠️ Góc {required}: score {best_score:.3f} < 0.6 — Thử lại",
-                    })
-                    continue
-
-                # Góc hợp lệ → lưu kết quả
-                angle_results[required] = {
-                    "matched": matched,
-                    "username": best_user.username if best_user else None,
-                    "score": round(best_score, 4),
-                }
-
-                angle_event = {
-                    "event": "verify3_angle",
-                    "step": angle_idx + 1,
-                    "total_steps": len(VERIFY_ANGLES),
-                    "required_angle": required,
-                    "face_direction": direction,
-                    "captured": required,
-                    "matched": matched,
-                    "username": best_user.username if best_user else None,
-                    "score": round(best_score, 4),
-                    "source": source,
+            # Không có mặt trong frame → bắn no_face, tiếp tục
+            if best_user is None and best_score == 0.0:
+                yield _event({
+                    "phase":     "no_face",
+                    "event":     "verify_no_face",
+                    "source":    source,
                     "timestamp": datetime.now().isoformat(),
+                    "message":   "Không phát hiện khuôn mặt",
+                })
+                continue
+
+            # Encode preview frame (chỉ khi cần gửi SSE)
+            _, buf    = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
+            frame_b64 = base64.b64encode(buf.tobytes()).decode()
+
+            matched   = best_score >= MATCH_THRESHOLD
+            ts        = datetime.now().isoformat()
+
+            if matched:
+                # ✅ Có người + thỏa mãn → bắn, tiếp tục quét ngay
+                event_data = {
+                    "phase":         "matched",
+                    "event":         "verify_matched",
+                    "username":      best_user.username,
+                    "position":      best_user.position or "",
+                    "expiry_date":   best_user.expiry_date.isoformat() if best_user.expiry_date else None,
+                    "score":         best_score,
+                    "source":        source,
+                    "timestamp":     ts,
                     "face_crop_b64": face_crop_b64,
-                    "message": (f"{'✅' if matched else '❌'} Góc {required}: "
-                                f"{best_user.username if matched else 'Không khớp'} ({best_score:.3f})"),
+                    "matched":       True,
+                    "message":       f"✅ Xác thực thành công: {best_user.username} ({best_score})",
                 }
-                yield _event({**angle_event, "frame_b64": frame_b64, "done": False,
-                              "angle_result": angle_results[required]})
-                asyncio.ensure_future(push_event_async(angle_event))
-                break  # chuyển sang góc tiếp theo
+                yield _event({**event_data, "frame_b64": frame_b64})
+                asyncio.ensure_future(push_event_async(event_data))
 
-        # ── Tổng hợp kết quả ────────────────────────────────────
-        votes: dict[str, int] = {}
-        for r in angle_results.values():
-            if r["matched"] and r["username"]:
-                votes[r["username"]] = votes.get(r["username"], 0) + 1
-
-        final_match = False
-        final_user = None
-        final_score = 0.0
-
-        if votes:
-            final_user = max(votes, key=lambda k: votes[k])
-            final_match = votes[final_user] >= 2
-            scores = [r["score"] for r in angle_results.values()
-                      if r["matched"] and r["username"] == final_user]
-            final_score = round(sum(scores) / len(scores), 4) if scores else 0.0
-
-        yield _event({
-            "done": True,
-            "matched": final_match,
-            "username": final_user if final_match else None,
-            "final_score": final_score,
-            "angle_results": angle_results,
-            "votes": votes,
-            "message": (f"✅ Xác thực thành công: {final_user} ({final_score})"
-                        if final_match else
-                        "❌ Xác thực thất bại — không khớp đủ 2/3 góc"),
-        })
+            else:
+                # ❌ Có người + không thỏa mãn → bắn, tiếp tục quét ngay
+                event_data = {
+                    "phase":            "scanning",
+                    "event":            "verify_unmatched",
+                    "username":         None,
+                    "nearest":          best_user.username,
+                    "nearest_position": best_user.position or "",
+                    "nearest_expiry_date": best_user.expiry_date.isoformat() if best_user.expiry_date else None,
+                    "score":            best_score,
+                    "source":           source,
+                    "timestamp":        ts,
+                    "face_crop_b64":    face_crop_b64,
+                    "matched":          False,
+                    "message":          f"❌ Không nhận diện được — gần nhất: {best_user.username} (score={best_score})",
+                }
+                yield _event({**event_data, "frame_b64": frame_b64})
+                asyncio.ensure_future(push_event_async(event_data))
 
     except asyncio.CancelledError:
         pass
@@ -227,14 +190,13 @@ async def _verify3_generator(source: str, username: Optional[str], db: Session):
             cap.release()
 
 
-@router.get("/verify3", summary="Xác thực 3 góc — 1fps/góc (SSE, TRAI→THANG→PHAI)")
-async def verify_3_angles(
+@router.get("/verify3", summary="Xác thực khuôn mặt liên tục — 1s/lần (SSE)")
+async def verify_continuous(
     source: str = Query(default="0"),
     username: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
 ):
     return StreamingResponse(
-        _verify3_generator(source, username, db),
+        _verify_generator(source, username),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

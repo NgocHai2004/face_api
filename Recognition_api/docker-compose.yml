@@ -1,0 +1,57 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: recognition_mongodb
+    restart: unless-stopped
+    network_mode: host          # MongoDB lắng nghe tại localhost:28017 trên host
+    command: ["mongod", "--port", "28017"]
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    environment:
+      MONGO_INITDB_DATABASE: face_recognition
+    # ── Bảo mật (tùy chọn) ──
+    # Bỏ comment nếu muốn bật xác thực MongoDB:
+    # MONGO_INITDB_ROOT_USERNAME: admin
+    # MONGO_INITDB_ROOT_PASSWORD: changeme
+    # Khi bật auth, đổi MONGODB_URL trong .env thành:
+    # mongodb://admin:changeme@localhost:28017
+
+  recognition_api:
+    build: .
+    container_name: recognition_api
+    restart: unless-stopped
+    network_mode: host          # dùng host network → kết nối MongoDB tại localhost:27017
+    depends_on:
+      - mongodb
+    volumes:
+      - ./face_images:/app/face_images       # lưu ảnh khuôn mặt ra ngoài
+      - insightface_models:/root/.insightface # cache model InsightFace
+      - ./app:/app/app                        # live-reload code + static HTML
+    env_file:
+      - .env
+    # Uncomment để khai báo biến trực tiếp:
+    # environment:
+    #   - APP_HOST=0.0.0.0
+    #   - APP_PORT=8001
+    #   - SECRET_KEY=change_this_in_production
+    #   - RTSP1=http://localhost:8090/stream
+    #   - MONGODB_URL=mongodb://localhost:27017   # host network → localhost
+    #   - MONGODB_DB_NAME=face_recognition
+    #   - MONGODB_PORT=27017
+    #   - INSIGHTFACE_MODEL=buffalo_l
+    #   - FACE_THRESHOLD=0.5
+    #   - FACE_IMAGES_DIR=./face_images
+
+# ── Bridge network (thay thế host network) ─────────────────────────────────
+# Nếu muốn chạy bridge network, thay mỗi service thành:
+#   networks:
+#     - face_net
+# Và đổi MONGODB_URL=mongodb://mongodb:27017 trong .env
+# networks:
+#   face_net:
+
+volumes:
+  insightface_models:
+  mongodb_data:
+  mongodb_config:

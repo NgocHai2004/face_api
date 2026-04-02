@@ -41,8 +41,12 @@ logger = logging.getLogger("event_hub.ws_producer")
 router = APIRouter()
 normalizer = EventNormalizer()
 
-# Fields chứa base64 ảnh cần intercept
-_BASE64_FIELDS = ("face_crop_b64", "face_crop_base64")
+# Fields chứa base64 ảnh cần intercept: (field_name, output_url_key, output_path_key, file_prefix)
+_BASE64_FIELDS = (
+    ("face_crop_b64",    "face_image_url",  "face_image_path",  "face"),
+    ("face_crop_base64", "face_image_url",  "face_image_path",  "face"),
+    ("face_db_64",       "face_db_url",     "face_db_path",     "db"),
+)
 
 # Fields thuộc về RawEvent schema (không đưa vào payload)
 _SCHEMA_FIELDS = {"source", "type", "priority", "topic", "payload"}
@@ -76,26 +80,24 @@ def _normalize_data(data: dict, client_host: str, source_override: str | None) -
         data["payload"] = payload
 
     # Intercept base64 ở root level
-    for field in _BASE64_FIELDS:
+    for field, url_key, path_key, prefix in _BASE64_FIELDS:
         if field in data:
             b64 = data.pop(field)
-            file_path = save_face_crop(b64, prefix="face")
+            file_path = save_face_crop(b64, prefix=prefix)
             data.setdefault("payload", {})
-            data["payload"]["face_image_url"]  = get_image_url(file_path, get_hub_base_url())
-            data["payload"]["face_image_path"] = file_path
-            break
+            data["payload"][url_key]  = get_image_url(file_path, get_hub_base_url())
+            data["payload"][path_key] = file_path
 
     # Intercept base64 trong payload
     payload = data.get("payload", {})
     if isinstance(payload, dict):
-        for field in _BASE64_FIELDS:
+        for field, url_key, path_key, prefix in _BASE64_FIELDS:
             if field in payload:
                 b64 = payload.pop(field)
-                file_path = save_face_crop(b64, prefix="face")
-                payload["face_image_url"]  = get_image_url(file_path, get_hub_base_url())
-                payload["face_image_path"] = file_path
-                data["payload"] = payload
-                break
+                file_path = save_face_crop(b64, prefix=prefix)
+                payload[url_key]  = get_image_url(file_path, get_hub_base_url())
+                payload[path_key] = file_path
+        data["payload"] = payload
 
     return data
 

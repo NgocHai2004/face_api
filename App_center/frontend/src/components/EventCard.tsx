@@ -32,6 +32,16 @@ function formatPayload(payload: Record<string, unknown>): string {
   return JSON.stringify(payload, null, 2)
 }
 
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString('vi-VN', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+    })
+  } catch {
+    return iso
+  }
+}
+
 export function EventCard({ event, isNew = false }: EventCardProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -39,6 +49,12 @@ export function EventCard({ event, isNew = false }: EventCardProps) {
   const topicClass  = TOPIC_COLORS[event.topic] ?? 'bg-slate-500/20 text-slate-300 border-slate-500/30'
   const priorityCls = PRIORITY_COLORS[event.priority] ?? 'text-slate-400'
   const hasPayload  = Object.keys(event.payload).length > 0
+
+  // Extract expiry_date from face_recognition payload for highlight
+  const expiryDate = event.type === 'face_recognition'
+    ? (event.payload['expiry_date'] as string | null | undefined) ?? null
+    : null
+  const isExpired = expiryDate ? new Date(expiryDate) < new Date() : false
 
   return (
     <div
@@ -58,11 +74,27 @@ export function EventCard({ event, isNew = false }: EventCardProps) {
 
         {/* Type + Source */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-sm text-white truncate">{event.type}</span>
             <span className={`text-xs font-medium ${priorityCls}`}>
               [{event.priority}]
             </span>
+            {/* Username badge for face_recognition */}
+            {event.type === 'face_recognition' && typeof event.payload['username'] === 'string' && (
+              <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium truncate max-w-[120px]">
+                👤 {event.payload['username'] as string}
+              </span>
+            )}
+            {/* Expiry date badge */}
+            {expiryDate && (
+              <span className={`text-xs px-1.5 py-0.5 rounded border font-medium flex-shrink-0 ${
+                isExpired
+                  ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                  : 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
+              }`}>
+                📅 {isExpired ? '⚠️ ' : ''}{formatDate(expiryDate)}
+              </span>
+            )}
           </div>
           <div className="text-xs text-slate-500 truncate">
             <span className="text-slate-400">{event.source}</span>

@@ -72,7 +72,8 @@ export function ProducerPanel() {
   function connectWs() {
     if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close() }
     setWsStatus('connecting')
-    const ws = new WebSocket(`ws://localhost:8000/ws/producer`)
+    const wsBase = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8000'
+    const ws = new WebSocket(`${wsBase}/ws/producer`)
     wsRef.current = ws
     ws.onopen  = () => setWsStatus('connected')
     ws.onerror = () => setWsStatus('disconnected')
@@ -129,7 +130,8 @@ export function ProducerPanel() {
     } else {
       // REST
       try {
-        const res = await fetch('http://localhost:8000/events/ingest', {
+        const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+        const res = await fetch(`${apiBase}/events/ingest`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(eventData),

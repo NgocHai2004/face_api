@@ -3,6 +3,8 @@
  */
 import type { ConnectionStatus } from '../types/event'
 
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+
 interface StatusBarProps {
   status: ConnectionStatus
   subscribedTopic: string
@@ -69,6 +71,20 @@ export function StatusBar({
           className="px-3 py-1 text-xs text-slate-400 hover:text-white border border-slate-600 hover:border-slate-400 rounded transition-colors"
         >
           Clear
+        </button>
+
+        <button
+          onClick={async () => {
+            if (!confirm('Xóa toàn bộ events khỏi bộ nhớ và MongoDB?')) return
+            try {
+              await fetch(`${API_BASE}/events`, { method: 'DELETE' })
+              onClear()
+            } catch { /* ignore */ }
+          }}
+          className="px-3 py-1 text-xs text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-400 rounded transition-colors"
+          title="Xóa tất cả events khỏi DB và bộ nhớ"
+        >
+          🗑 Clear All
         </button>
 
         {status === 'connected' ? (

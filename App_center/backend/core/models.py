@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 class EventType(str, Enum):
     FACE_RECOGNITION = "face_recognition"
     FINGERPRINT      = "fingerprint"
+    CARD_READER      = "card_reader"     # thẻ từ / RFID
     CUSTOM           = "custom"          # fallback cho mọi type không xác định
 
 
@@ -38,6 +39,7 @@ class EventTopic(str, Enum):
 TYPE_TO_TOPIC: dict[EventType, EventTopic] = {
     EventType.FACE_RECOGNITION: EventTopic.SECURITY,
     EventType.FINGERPRINT:      EventTopic.SECURITY,
+    EventType.CARD_READER:      EventTopic.SECURITY,
     EventType.CUSTOM:           EventTopic.CUSTOM,
 }
 

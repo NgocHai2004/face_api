@@ -5,27 +5,29 @@ SSE endpoint đăng ký khuôn mặt 3 góc:
   GET /enroll3?username=alice&source=0
 
 Flow: THANG → TRAI → PHAI
-  Phát hiện đúng hướng → chụp 1 ảnh ngay → chuyển góc tiếp theo
-  Cuối: lưu embedding trung bình vào DB
+  Mỗi 1 giây: lấy 1 snapshot → detect hướng → nếu đúng hướng → trích embedding → chuyển góc
+  Cuối: lưu embedding trung bình vào MongoDB
 """
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
+from typing import Optional
 import cv2
 import asyncio
 import base64
 import numpy as np
 import json
-from typing import Optional
-from sqlalchemy.orm import Session
+from datetime import datetime
+from dateutil import parser as dateutil_parser
 
-from app.database import get_db, User
+from app.database import User
 from app.face_utils import (
-    extract_embedding_from_image,
-    embedding_to_bytes, save_face_image,
+    embedding_from_faces,
+    embedding_to_bytes,
+    save_face_image,
 )
 from app.face_direction import get_face_direction
-from app.camera_manager import camera_manager
-from app.rtsp_utils import _parse_source
+from app.rtsp_utils import _parse_source, fetch_snapshot_from_url
+from app.ws_producer import push_event_async
 
 router = APIRouter()
 
@@ -36,67 +38,97 @@ def _event(data: dict) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-async def _enroll3_generator(username: str, source: str, db: Session):
+def _get_frame_fn(src):
+    """Trả về hàm lấy frame phù hợp với loại source."""
+    if isinstance(src, int):
+        from app.camera_manager import camera_manager
+        if not camera_manager.is_running or camera_manager._source != src:
+            camera_manager.start(src)
+        return camera_manager.get_frame, None
+
+    if isinstance(src, str) and src.lower().startswith("http"):
+        snapshot_url = src.replace("/stream", "/snapshot")
+        return lambda: fetch_snapshot_from_url(snapshot_url), None
+
+    # RTSP
+    cap = cv2.VideoCapture(src)
+    if not cap.isOpened():
+        return None, None
+    return lambda: (lambda ret, f: f if ret else None)(*cap.read()), cap
+
+
+async def _enroll3_generator(username: str, source: str, position: Optional[str] = None, expiry_date: Optional[datetime] = None):
+    # ── Kiểm tra / tạo user ─────────────────────────────────
+    user = await User.find_one(User.username == username)
+    if user:
+        if position is not None:
+            user.position = position
+        if expiry_date is not None:
+            user.expiry_date = expiry_date
+        if position is not None or expiry_date is not None:
+            await user.save()
+        yield _event({
+            "user_status": "exists",
+            "username": username,
+            "position": user.position,
+            "expiry_date": user.expiry_date.isoformat() if user.expiry_date else None,
+            "message": f"ℹ️ Đăng ký khuôn mặt cho '{username}'.",
+            "done": False,
+        })
+    else:
+        user = User(username=username, hashed_password="", position=position, expiry_date=expiry_date)
+        await user.insert()
+        yield _event({
+            "user_status": "created",
+            "username": username,
+            "position": position,
+            "expiry_date": expiry_date.isoformat() if expiry_date else None,
+            "message": f"✅ Đã tạo user '{username}' — tiến hành đăng ký khuôn mặt.",
+            "done": False,
+        })
+
     src = _parse_source(source)
 
-    # Khởi động camera
-    if isinstance(src, int):
-        if not camera_manager.is_running or camera_manager._source != src:
-            if not camera_manager.start(src):
-                yield _event({"error": f"Không mở được camera {src}"})
-                return
-        get_frame = camera_manager.get_frame
-    else:
-        cap = cv2.VideoCapture(src)
-        if not cap.isOpened():
-            yield _event({"error": f"Không mở được RTSP: {source}"})
-            return
-        def get_frame():
-            ret, f = cap.read()
-            return f if ret else None
+    get_frame, cap = _get_frame_fn(src)
+    if get_frame is None:
+        yield _event({"error": f"Không mở được source: {source}"})
+        return
 
     embeddings_collected: dict[str, np.ndarray] = {}
 
     try:
-        angle_idx = 0
-
-        while angle_idx < len(REQUIRED_ANGLES):
-            required = REQUIRED_ANGLES[angle_idx]
-
-            frame = get_frame()
-            if frame is None:
-                await asyncio.sleep(0.05)
-                continue
-
-            result    = get_face_direction(frame)
-            direction = result["direction"]
-            annotated = result["annotated_frame"]
-
-            h, w = annotated.shape[:2]
-            cv2.putText(annotated, f"Buoc {angle_idx+1}/3: Hay quay mat {required}",
-                        (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2)
-
-            _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 70])
-            frame_b64 = base64.b64encode(buf.tobytes()).decode()
-
-            # Gửi frame preview
+        for angle_idx, required in enumerate(REQUIRED_ANGLES):
+            # Thông báo bắt đầu góc mới
             yield _event({
                 "step": angle_idx + 1,
                 "total_steps": len(REQUIRED_ANGLES),
                 "required_angle": required,
-                "direction": direction,
-                "frame_b64": frame_b64,
                 "done": False,
                 "message": f"Bước {angle_idx+1}/3 — Hãy quay mặt: {required}",
             })
 
-            # Phát hiện đúng hướng → chụp ngay
-            if direction == required:
-                embedding, _ = extract_embedding_from_image(frame)
-                if embedding is not None:
-                    embeddings_collected[required] = embedding
-                    save_face_image(f"{username}_{required}", frame)
+            # Vòng lặp 1fps cho góc này
+            while True:
+                await asyncio.sleep(1.0)
 
+                frame = get_frame()
+                if frame is None:
+                    yield _event({"step": angle_idx+1, "done": False,
+                                  "message": "⚠️ Không lấy được frame, thử lại..."})
+                    continue
+
+                # Detect hướng
+                result = get_face_direction(frame)
+                direction = result["direction"]
+                annotated = result["annotated_frame"]
+
+                # Encode preview frame
+                cv2.putText(annotated, f"Buoc {angle_idx+1}/3: Quay mat {required}",
+                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2)
+                _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 65])
+                frame_b64 = base64.b64encode(buf.tobytes()).decode()
+
+                if direction != required:
                     yield _event({
                         "step": angle_idx + 1,
                         "total_steps": len(REQUIRED_ANGLES),
@@ -104,35 +136,81 @@ async def _enroll3_generator(username: str, source: str, db: Session):
                         "direction": direction,
                         "frame_b64": frame_b64,
                         "done": False,
-                        "captured": required,
-                        "message": f"✅ Đã chụp góc {required}!",
+                        "message": f"Bước {angle_idx+1}/3 — Cần: {required}, đang: {direction or 'chưa rõ'}",
                     })
-                    angle_idx += 1
-                    await asyncio.sleep(0.5)   # dừng nhỏ trước góc tiếp
-                # Nếu embedding None (không detect mặt) → thử lại frame tiếp
+                    continue
 
-            await asyncio.sleep(0.08)   # ~12fps
+                # Đúng hướng → trích embedding
+                embedding, face_crop = embedding_from_faces(frame, result.get("_faces", []))
 
-        # ── Lưu DB ──────────────────────────────────────────
+                if embedding is None:
+                    yield _event({
+                        "step": angle_idx + 1,
+                        "total_steps": len(REQUIRED_ANGLES),
+                        "required_angle": required,
+                        "direction": direction,
+                        "frame_b64": frame_b64,
+                        "done": False,
+                        "message": f"⚠️ Góc {required}: không trích được embedding, thử lại...",
+                    })
+                    continue
+
+                # Encode crop
+                face_crop_b64 = None
+                if face_crop is not None and face_crop.size > 0:
+                    _, crop_buf = cv2.imencode(".jpg", face_crop, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                    face_crop_b64 = base64.b64encode(crop_buf.tobytes()).decode()
+
+                # Lưu embedding + ảnh
+                embeddings_collected[required] = embedding
+                save_face_image(f"{username}_{required}", frame)
+
+                angle_event = {
+                    "event": "enroll3_angle",
+                    "step": angle_idx + 1,
+                    "total_steps": len(REQUIRED_ANGLES),
+                    "required_angle": required,
+                    "face_direction": direction,
+                    "captured": required,
+                    "username": username,
+                    "position": position or "",
+                    "expiry_date": expiry_date.isoformat() if expiry_date else None,
+                    "source": source,
+                    "timestamp": datetime.now().isoformat(),
+                    "face_crop_b64": face_crop_b64,
+                    "message": f"✅ Đã chụp góc {required} cho '{username}'!",
+                }
+                yield _event({**angle_event, "frame_b64": frame_b64, "done": False})
+                asyncio.ensure_future(push_event_async(angle_event))
+                break  # chuyển sang góc tiếp theo
+
+        # ── Lưu MongoDB ──────────────────────────────────────
         if len(embeddings_collected) == len(REQUIRED_ANGLES):
             avg = np.mean(list(embeddings_collected.values()), axis=0)
             avg /= np.linalg.norm(avg)
 
-            user = db.query(User).filter(User.username == username).first()
+            user = await User.find_one(User.username == username)
             if user:
                 user.face_embedding = embedding_to_bytes(avg)
+                await user.save()
             else:
-                user = User(username=username, hashed_password="",
-                            face_embedding=embedding_to_bytes(avg))
-                db.add(user)
-            db.commit()
+                new_user = User(username=username, hashed_password="")
+                new_user.face_embedding = embedding_to_bytes(avg)
+                await new_user.insert()
 
-            yield _event({
+            done_event = {
+                "event": "enroll3_done",
                 "done": True,
                 "username": username,
+                "position": position or "",
+                "expiry_date": expiry_date.isoformat() if expiry_date else None,
                 "angles_captured": list(embeddings_collected.keys()),
+                "source": source,
+                "timestamp": datetime.now().isoformat(),
                 "message": f"✅ Đăng ký thành công 3 góc cho '{username}'!",
-            })
+            }
+            yield _event(done_event)
+            asyncio.ensure_future(push_event_async(done_event))
         else:
             yield _event({
                 "done": True,
@@ -144,18 +222,34 @@ async def _enroll3_generator(username: str, source: str, db: Session):
     except Exception as e:
         yield _event({"error": str(e)})
     finally:
-        if not isinstance(src, int) and 'cap' in dir():
+        if cap is not None:
             cap.release()
 
 
-@router.get("/enroll3", summary="Đăng ký 3 góc mặt — 1 ảnh/góc (SSE)")
+@router.get("/enroll3", summary="Đăng ký 3 góc mặt — 1fps/góc (SSE, THANG→TRAI→PHAI)")
 async def enroll_3_angles(
     username: str = Query(...),
     source: str = Query(default="0"),
-    db: Session = Depends(get_db),
+    position: str = Query(..., description="Chức vụ bắt buộc (VD: Nhân viên, Quản lý, Bảo vệ)"),
+    expiry_date: Optional[str] = Query(None, description="Ngày hết hạn (ISO 8601, VD: 2027-12-31)"),
 ):
+    from fastapi.responses import JSONResponse
+    if not position.strip():
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "position là bắt buộc và không được để trống"},
+        )
+    parsed_expiry: Optional[datetime] = None
+    if expiry_date:
+        try:
+            parsed_expiry = dateutil_parser.parse(expiry_date)
+        except Exception:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": f"expiry_date không hợp lệ: '{expiry_date}'. Dùng định dạng ISO 8601 (VD: 2027-12-31)"},
+            )
     return StreamingResponse(
-        _enroll3_generator(username, source, db),
+        _enroll3_generator(username, source, position.strip(), parsed_expiry),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

@@ -1,7 +1,10 @@
 /**
  * EventStream - Live feed hiển thị danh sách events realtime
+ *
+ * Auto-scroll: chỉ kéo lên top khi user đang ở gần top (< 80px).
+ * Khi user đang scroll xuống dưới → giữ nguyên vị trí, hiện nút "↑ New events".
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { NormalizedEvent } from '../types/event'
 import { EventCard } from './EventCard'
 
@@ -11,21 +14,53 @@ interface EventStreamProps {
   onClear?: () => void
 }
 
-export function EventStream({ events, autoScroll = true, onClear }: EventStreamProps) {
-  const containerRef  = useRef<HTMLDivElement>(null)
-  const prevCountRef  = useRef<number>(0)
+const SCROLL_THRESHOLD = 80 // px từ top để coi là "đang ở đầu"
 
-  // Auto-scroll khi có event mới
+export function EventStream({ events, autoScroll = true, onClear }: EventStreamProps) {
+  const containerRef    = useRef<HTMLDivElement>(null)
+  const prevCountRef    = useRef<number>(0)
+  const userScrolledRef = useRef<boolean>(false)  // user đang scroll xuống?
+  const [newCount, setNewCount] = useState(0)      // số event mới khi user đang scroll
+
+  // Lắng nghe scroll của user
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const onScroll = () => {
+      userScrolledRef.current = el.scrollTop > SCROLL_THRESHOLD
+      if (!userScrolledRef.current) {
+        // User cuộn về top → reset badge
+        setNewCount(0)
+      }
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+
+  // Auto-scroll hoặc đếm event mới khi user đang scroll
   useEffect(() => {
     if (!autoScroll) return
-    if (events.length > prevCountRef.current && containerRef.current) {
-      containerRef.current.scrollTop = 0
+    const added = events.length - prevCountRef.current
+    if (added > 0) {
+      if (userScrolledRef.current) {
+        // User đang scroll xuống → chỉ tăng badge, không nhảy
+        setNewCount(n => n + added)
+      } else if (containerRef.current) {
+        // User ở đầu danh sách → tự scroll lên top
+        containerRef.current.scrollTop = 0
+      }
     }
     prevCountRef.current = events.length
   }, [events.length, autoScroll])
 
+  const scrollToTop = () => {
+    if (containerRef.current) containerRef.current.scrollTop = 0
+    setNewCount(0)
+    userScrolledRef.current = false
+  }
+
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden relative">
       {/* Toolbar — luôn hiển thị */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-700 flex-shrink-0">
         <span className="text-xs text-slate-500">
@@ -53,7 +88,8 @@ export function EventStream({ events, autoScroll = true, onClear }: EventStreamP
       ) : (
         <div
           ref={containerRef}
-          className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-2"
+          className="flex-1 min-h-0 overflow-y-scroll px-3 py-3 flex flex-col gap-2"
+          style={{ scrollbarWidth: 'thin', scrollbarColor: '#334155 transparent' }}
         >
           {events.map((event, index) => (
             <EventCard
@@ -63,6 +99,22 @@ export function EventStream({ events, autoScroll = true, onClear }: EventStreamP
             />
           ))}
         </div>
+      )}
+
+      {/* Badge "↑ N new events" khi user đang scroll xuống */}
+      {newCount > 0 && (
+        <button
+          onClick={scrollToTop}
+          className="
+            absolute top-10 left-1/2 -translate-x-1/2
+            flex items-center gap-1.5
+            px-3 py-1 rounded-full text-xs font-medium
+            bg-sky-600 hover:bg-sky-500 text-white shadow-lg
+            transition-colors animate-bounce
+          "
+        >
+          ↑ {newCount} new event{newCount !== 1 ? 's' : ''}
+        </button>
       )}
     </div>
   )

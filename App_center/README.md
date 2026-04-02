@@ -182,3 +182,5 @@ App_center/
 ├── start.sh                  # Script khởi động
 └── README.md
 ```
+BaseURL: https://clawapigate.com/v1
+API key: sk-8cc87e7da38f71750cc50fde113027d9e535da42278da0bd

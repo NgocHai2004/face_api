@@ -1,7 +1,7 @@
 """
 Event Bus - in-memory event bus dùng asyncio.Queue
 - Nhận NormalizedEvent từ producers (WS hoặc REST)
-- Lưu lịch sử per-topic
+- Lưu lịch sử per-topic (in-memory) + persist MongoDB
 - Broadcast realtime tới tất cả consumers đang subscribe
 """
 import asyncio
@@ -85,16 +85,17 @@ class EventBus:
     # Consumer interface
     # ------------------------------------------------------------------
 
-    async def subscribe(self, ws: WebSocket, topic: str):
+    async def subscribe(self, ws: WebSocket, topic: str, send_history: bool = False):
         """Đăng ký WebSocket consumer vào topic (hoặc '*' để nhận tất cả)"""
         self._subscribers[topic].add(ws)
         logger.info("Consumer subscribed topic=%s total=%d", topic, len(self._subscribers[topic]))
 
-        # Gửi lịch sử gần nhất ngay khi subscribe
-        history = self.get_history(topic)
-        if history:
-            for evt in history:
-                await self._send_safe(ws, evt)
+        # Gửi lịch sử gần nhất chỉ khi được yêu cầu (mặc định tắt)
+        if send_history:
+            history = self.get_history(topic)
+            if history:
+                for evt in history:
+                    await self._send_safe(ws, evt)
 
     def unsubscribe(self, ws: WebSocket, topic: str):
         """Hủy đăng ký consumer khỏi topic"""
@@ -126,6 +127,15 @@ class EventBus:
     def get_active_topics(self) -> list[str]:
         """Danh sách topics đang có sự kiện trong lịch sử"""
         return [t for t, h in self._history.items() if h]
+
+    def clear_history(self, topic: str | None = None):
+        """Xóa in-memory history. topic=None → xóa tất cả topics."""
+        if topic is None:
+            self._history.clear()
+            logger.info("EventBus: cleared all in-memory history")
+        elif topic in self._history:
+            self._history[topic].clear()
+            logger.info("EventBus: cleared history for topic=%s", topic)
 
     def get_total_consumers(self) -> int:
         """Tổng số consumer connections đang active"""
@@ -160,8 +170,11 @@ class EventBus:
 
     async def _dispatch(self, event: NormalizedEvent):
         """Gửi event tới consumers subscribe topic tương ứng và wildcard"""
-        # Lưu vào lịch sử
+        # Lưu vào in-memory history
         self._history[event.topic].append(event)
+
+        # Persist vào MongoDB (fire-and-forget, không block dispatch)
+        asyncio.ensure_future(self._persist_to_mongo(event))
 
         # Tập hợp tất cả consumers cần nhận (topic cụ thể + wildcard)
         targets: set[WebSocket] = set()
@@ -179,6 +192,16 @@ class EventBus:
         )
         sent = sum(1 for r in results if r is True)
         logger.debug("Dispatched event id=%s topic=%s to %d/%d consumers", event.id, event.topic, sent, len(targets))
+
+    async def _persist_to_mongo(self, event: NormalizedEvent):
+        """Lưu event vào MongoDB. Bắt lỗi để không làm crash dispatcher."""
+        try:
+            from .database import EventDocument
+            doc = EventDocument.from_normalized(event)
+            await doc.insert()
+            logger.debug("Persisted event id=%s to MongoDB", event.id)
+        except Exception as exc:
+            logger.warning("MongoDB persist failed for event id=%s: %r", event.id, exc)
 
     async def _send_safe(self, ws: WebSocket, event: NormalizedEvent) -> bool:
         """Gửi event tới 1 WebSocket, bắt lỗi nếu connection đã đóng"""

@@ -11,7 +11,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ConnectionStatus, NormalizedEvent, WsMessage } from '../types/event'
 
-const WS_BASE_URL = 'ws://localhost:8000'
+// Dùng VITE_WS_URL nếu được set (Docker/prod), fallback về localhost khi dev local
+const WS_BASE_URL  = import.meta.env.VITE_WS_URL  ?? 'ws://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const MAX_EVENTS   = 200   // Giữ tối đa 200 events trong bộ nhớ
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000] // Backoff delays (ms)
 
@@ -145,30 +147,58 @@ export function useEventHub({
   }, [])
 
   // ---------------------------------------------------------------------------
+  // Clear events
+  // ---------------------------------------------------------------------------
+  const clearEvents = useCallback(() => setEvents([]), [])
+
+  // ---------------------------------------------------------------------------
+  // Fetch history từ MongoDB (GET /events/recent?from_db=true)
+  // ---------------------------------------------------------------------------
+  const fetchHistory = useCallback(async (historyTopic: string) => {
+    try {
+      const t = historyTopic === '*' ? '*' : encodeURIComponent(historyTopic)
+      const res = await fetch(`${API_BASE_URL}/events/recent?topic=${t}&limit=200&from_db=true`)
+      if (!res.ok) return
+      const data = await res.json()
+      const histEvents: NormalizedEvent[] = (data.events ?? [])
+        .slice()
+        .reverse()         // mới nhất lên đầu (API trả về cũ → mới)
+      if (histEvents.length === 0) return
+      setEvents(prev => {
+        // Gộp: realtime events (prev) + history, loại trùng theo id
+        const existingIds = new Set(prev.map(e => e.id))
+        const merged = [...prev, ...histEvents.filter(e => !existingIds.has(e.id))]
+        return merged.slice(0, maxEvents)
+      })
+    } catch {
+      // Bỏ qua lỗi fetch history (MongoDB offline, v.v.)
+    }
+  }, [maxEvents])
+
+  // ---------------------------------------------------------------------------
   // Change topic
   // ---------------------------------------------------------------------------
   const changeTopic = useCallback((newTopic: string) => {
     currentTopic.current = newTopic
     setEvents([]) // Clear events khi đổi topic
-    // Reconnect với topic mới
+    // Reconnect với topic mới + load lại history
     if (wsRef.current) {
       wsRef.current.onclose = null
       wsRef.current.close()
       wsRef.current = null
     }
     connect()
-  }, [connect])
+    fetchHistory(newTopic)
+  }, [connect, fetchHistory])
 
   // ---------------------------------------------------------------------------
-  // Clear events
-  // ---------------------------------------------------------------------------
-  const clearEvents = useCallback(() => setEvents([]), [])
-
-  // ---------------------------------------------------------------------------
-  // Auto-connect on mount
+  // Auto-connect on mount + load history
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    if (autoConnect) connect()
+    if (autoConnect) {
+      connect()
+      fetchHistory(currentTopic.current)
+    }
     return () => {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
       if (wsRef.current) {

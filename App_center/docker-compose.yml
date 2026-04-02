@@ -1,0 +1,29 @@
+services:
+
+  # ── Backend: FastAPI Event Hub ────────────────────────────────
+  backend:
+    build: ./backend
+    container_name: app_center_backend
+    restart: unless-stopped
+    network_mode: host          # dùng host network → kết nối MongoDB tại localhost:28017
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MONGODB_URL=mongodb://localhost:28017
+      - MONGODB_DB_NAME=event_hub
+      - EVENT_TTL_DAYS=30
+
+  # ── Frontend: React + Vite → build → Nginx ───────────────────
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # WebSocket URL trỏ về backend qua nginx proxy (same-origin)
+        # Khi dùng nginx proxy, WS đi qua /ws/ → không cần đổi host
+        VITE_WS_URL: ws://localhost:8000
+        VITE_API_URL: http://localhost:8000
+    container_name: app_center_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend

@@ -1,7 +1,6 @@
 /**
  * TopicFilter - Bộ lọc topic để subscribe vào Event Hub
  */
-import type { EventTopic } from '../types/event'
 import { TOPIC_COLORS } from '../types/event'
 
 const AVAILABLE_TOPICS: { value: string; label: string; icon: string }[] = [

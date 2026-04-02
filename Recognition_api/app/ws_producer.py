@@ -9,29 +9,29 @@ logger = logging.getLogger(__name__)
 WS_PRODUCER_URL = "ws://localhost:8000/ws/producer"
 
 
-def _build_message(payload: dict) -> dict:
+def _build_message(payload: dict, event_type: str = "face_recognition") -> dict:
     """
-    Wrap verify result thành format Hub yêu cầu:
+    Wrap event payload thành format Hub yêu cầu:
     {
         "source": "face_recognition_api",
-        "type":   "face_recognition",
+        "type":   "face_recognition",   # hoặc loại khác
         "priority": "high",
-        "payload": { ...dữ liệu xác thực... }
+        "payload": { ...dữ liệu sự kiện... }
     }
     """
     return {
         "source": "face_recognition_api",
-        "type": "face_recognition",
+        "type": event_type,
         "priority": "high",
         "payload": payload,
     }
 
 
-async def push_event_async(payload: dict):
+async def push_event_async(payload: dict, event_type: str = "face_recognition"):
     """
     Async — dùng với asyncio.ensure_future() hoặc await bên trong async route.
     """
-    message = _build_message(payload)
+    message = _build_message(payload, event_type=event_type)
     try:
         async with websockets.connect(WS_PRODUCER_URL, open_timeout=5) as ws:
             await ws.send(json.dumps(message, ensure_ascii=False))
@@ -41,9 +41,11 @@ async def push_event_async(payload: dict):
                 logger.info(f"[WS] Hub response: {resp}")
             except asyncio.TimeoutError:
                 pass
+            ev = payload.get("event", "face_recognition")
             logger.info(
-                f"[WS] Pushed face_recognition event: "
-                f"username={payload.get('username')} matched={payload.get('matched')}"
+                f"[WS] Pushed {ev} event: "
+                f"username={payload.get('username')} "
+                f"captured={payload.get('captured')} matched={payload.get('matched')}"
             )
     except Exception as e:
         logger.warning(f"[WS] Push failed (Hub may be offline): {e}")

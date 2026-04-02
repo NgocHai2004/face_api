@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 
 
 # ── Registration ──────────────────────────────────────────────
@@ -31,3 +32,13 @@ class FaceVerifyResponse(BaseModel):
     similarity: float
     stream_used: Optional[str]
     message: str
+
+
+# ── User info ─────────────────────────────────────────────────
+class UserInfo(BaseModel):
+    username: str
+    position: Optional[str] = None
+    expiry_date: Optional[datetime] = None
+    has_face: bool
+    face_image_path: Optional[str] = None
+    created_at: Optional[str] = None

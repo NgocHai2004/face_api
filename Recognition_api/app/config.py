@@ -14,8 +14,12 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "changeme"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
-    # Database
-    DATABASE_URL: str = "sqlite:///./face_recognition.db"
+    # MongoDB
+    # Khi chạy docker-compose với network_mode: host → dùng localhost:28017
+    # Khi chạy bridge network → dùng mongodb://mongodb:28017
+    MONGODB_URL: str = "mongodb://localhost:28017"
+    MONGODB_DB_NAME: str = "face_recognition"
+    MONGODB_PORT: int = 28017
 
     # InsightFace
     INSIGHTFACE_MODEL: str = "buffalo_l"

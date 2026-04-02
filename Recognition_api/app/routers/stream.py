@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 import cv2
 import asyncio
@@ -8,10 +8,9 @@ import json
 import time
 import threading
 from typing import Optional
-from sqlalchemy.orm import Session
 from datetime import datetime
 
-from app.database import get_db, User
+from app.database import User
 from app.face_utils import (
     extract_embedding_from_image,
     bytes_to_embedding, verify_faces, crop_to_base64,
@@ -52,16 +51,20 @@ def _get_frame_from_source(src, rtsp_cap) -> Optional[np.ndarray]:
 # ─────────────────────────────────────────────────────────────
 # SSE stream – 15 fps detect (YuNet) + 1-2 fps embed (InsightFace bg)
 # ─────────────────────────────────────────────────────────────
-async def _stream_generator(rtsp_url: str, username: Optional[str], session_id: str, db: Session):
+async def _stream_generator(rtsp_url: str, username: Optional[str], session_id: str):
     _sessions[session_id] = False
     interval = 1.0 / 15  # target 15 fps
 
-    # Preload users + stored embeddings once
+    # Preload users + stored embeddings once từ MongoDB
     if username:
-        users = db.query(User).filter(
-            User.username == username, User.face_embedding.isnot(None)).all()
+        users = await User.find(
+            User.username == username,
+            User.face_embedding_b64 != None,  # noqa: E711
+        ).to_list()
     else:
-        users = db.query(User).filter(User.face_embedding.isnot(None)).all()
+        users = await User.find(
+            User.face_embedding_b64 != None  # noqa: E711
+        ).to_list()
 
     stored_embeddings = [
         (u.username, bytes_to_embedding(u.face_embedding)) for u in users
@@ -215,10 +218,9 @@ async def stream(
     rtsp_url: str = Query(...),
     username: Optional[str] = Query(None),
     session_id: str = Query(...),
-    db: Session = Depends(get_db),
 ):
     return StreamingResponse(
-        _stream_generator(rtsp_url, username, session_id, db),
+        _stream_generator(rtsp_url, username, session_id),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

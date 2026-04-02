@@ -85,3 +85,4 @@ htmlcov/
 # ── Misc artefacts ────────────────────────────────────────────
 patch_onnx.py
 =4.0.0
+module-rfid-nfc-13-56mhz-pn532/

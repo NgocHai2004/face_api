@@ -60,37 +60,81 @@ normalizer = EventNormalizer()
             "content": {
                 "application/json": {
                     "examples": {
-                        "face_recognition": {
-                            "summary": "👤 Face Recognition (matched)",
+                        "verify_matched": {
+                            "summary": "✅ verify_matched — Xác thực thành công",
                             "value": {
                                 "source": "face_recognition_api",
                                 "type": "face_recognition",
                                 "priority": "high",
                                 "payload": {
-                                    "username":         "Nguyen Van A",
-                                    "matched":          True,
-                                    "similarity":       0.97,
-                                    "face_crop_base64": "<base64_jpeg_string>",
-                                    "timestamp":        "2026-03-29T10:54:17.445206",
-                                    "rtsp_url":         "rtsp://camera_ip/stream",
-                                    "message":          "Nhận diện thành công",
+                                    "event":     "verify_matched",
+                                    "phase":     "matched",
+                                    "matched":   True,
+                                    "username":  "nguyen_van_a",
+                                    "position":  "Nhan vien",
+                                    "score":     0.8542,
+                                    "source":    "http://192.168.x.x:8090/stream",
+                                    "timestamp": "2026-04-02T10:00:00",
+                                    "message":   "✅ Xác thực thành công: nguyen_van_a (0.8542)",
+                                    "face_crop_b64": "<base64_jpeg>",
                                 },
                             },
                         },
-                        "face_recognition_not_matched": {
-                            "summary": "👤 Face Not Detected",
+                        "verify_unmatched": {
+                            "summary": "❌ verify_unmatched — Có mặt nhưng không khớp",
                             "value": {
                                 "source": "face_recognition_api",
                                 "type": "face_recognition",
-                                "priority": "medium",
+                                "priority": "high",
                                 "payload": {
-                                    "username":         None,
+                                    "event":            "verify_unmatched",
+                                    "phase":            "scanning",
                                     "matched":          False,
-                                    "similarity":       0,
-                                    "face_crop_base64": None,
-                                    "timestamp":        "2026-03-29T10:54:17.445206",
-                                    "rtsp_url":         "0",
-                                    "message":          "Không phát hiện khuôn mặt trong frame RTSP",
+                                    "username":         None,
+                                    "nearest":          "nguyen_van_a",
+                                    "nearest_position": "Nhan vien",
+                                    "score":            0.3210,
+                                    "source":           "http://192.168.x.x:8090/stream",
+                                    "timestamp":        "2026-04-02T10:00:01",
+                                    "message":          "❌ Không nhận diện được — gần nhất: nguyen_van_a (score=0.321)",
+                                    "face_crop_b64":    "<base64_jpeg>",
+                                },
+                            },
+                        },
+                        "enroll3_angle": {
+                            "summary": "📸 enroll3_angle — Chụp 1 góc thành công",
+                            "value": {
+                                "source": "face_recognition_api",
+                                "type": "face_recognition",
+                                "priority": "high",
+                                "payload": {
+                                    "event":          "enroll3_angle",
+                                    "step":           1,
+                                    "total_steps":    3,
+                                    "required_angle": "THANG",
+                                    "captured":       "THANG",
+                                    "username":       "nguyen_van_a",
+                                    "source":         "0",
+                                    "timestamp":      "2026-04-02T10:00:00",
+                                    "message":        "✅ Đã chụp góc THANG cho 'nguyen_van_a'!",
+                                    "face_crop_b64":  "<base64_jpeg>",
+                                },
+                            },
+                        },
+                        "enroll3_done": {
+                            "summary": "🎉 enroll3_done — Hoàn thành đăng ký 3 góc",
+                            "value": {
+                                "source": "face_recognition_api",
+                                "type": "face_recognition",
+                                "priority": "high",
+                                "payload": {
+                                    "event":           "enroll3_done",
+                                    "done":            True,
+                                    "username":        "nguyen_van_a",
+                                    "angles_captured": ["THANG", "TRAI", "PHAI"],
+                                    "source":          "0",
+                                    "timestamp":       "2026-04-02T10:00:05",
+                                    "message":         "✅ Đăng ký thành công 3 góc cho 'nguyen_van_a'!",
                                 },
                             },
                         },
@@ -108,6 +152,24 @@ normalizer = EventNormalizer()
                                     "action":      "entry",
                                     "location":    "main_entrance",
                                     "reader_id":   "FP-001",
+                                },
+                            },
+                        },
+                        "card_reader": {
+                            "summary": "💳 Card Reader (thẻ từ)",
+                            "value": {
+                                "source": "card_reader_01",
+                                "type": "card_reader",
+                                "priority": "high",
+                                "payload": {
+                                    "card_id":     "A1B2C3D4",
+                                    "person_id":   "EMP001",
+                                    "person_name": "Nguyen Van A",
+                                    "action":      "entry",
+                                    "location":    "main_entrance",
+                                    "reader_id":   "CR-001",
+                                    "access":      True,
+                                    "message":     "Quẹt thẻ thành công",
                                 },
                             },
                         },
@@ -160,19 +222,58 @@ async def ingest_event(raw: RawEvent):
 
 
 # ---------------------------------------------------------------------------
-# GET /events/recent - Query lịch sử events
+# GET /events/recent - Query lịch sử events (in-memory + MongoDB fallback)
 # ---------------------------------------------------------------------------
 
 @router.get("/events/recent", response_model=RecentEventsResponse, tags=["Consumer"])
 async def get_recent_events(
-    topic: str = Query(default="*", description="Topic cần query, dùng '*' để lấy tất cả"),
-    limit: int = Query(default=50, ge=1, le=500, description="Số lượng events tối đa"),
+    topic: str  = Query(default="*", description="Topic cần query, dùng '*' để lấy tất cả"),
+    limit: int  = Query(default=50, ge=1, le=500, description="Số lượng events tối đa"),
+    from_db: bool = Query(default=False, description="True = query từ MongoDB (lịch sử lâu dài), False = in-memory"),
 ):
     """
     Lấy N sự kiện gần nhất của một topic.
-    Hữu ích cho consumer muốn poll thay vì WebSocket.
+    - `from_db=false` (mặc định): từ in-memory (nhanh, tối đa 100 event/topic)
+    - `from_db=true`: từ MongoDB (lịch sử đầy đủ, chậm hơn)
     """
-    events = event_bus.get_history(topic=topic, limit=limit)
+    if from_db:
+        try:
+            from core.database import EventDocument
+            from beanie.operators import In
+            query = {}
+            if topic != "*":
+                docs = await EventDocument.find(
+                    EventDocument.topic == topic
+                ).sort(-EventDocument.timestamp).limit(limit).to_list()
+            else:
+                docs = await EventDocument.find_all().sort(
+                    -EventDocument.timestamp
+                ).limit(limit).to_list()
+
+            # Chuyển EventDocument → NormalizedEvent để response_model hoạt động
+            from core.models import NormalizedEvent, EventMetadata
+            from uuid import UUID
+            events = []
+            for d in reversed(docs):  # reversed để mới nhất ở cuối
+                try:
+                    events.append(NormalizedEvent(
+                        id        = UUID(d.event_id),
+                        timestamp = d.timestamp,
+                        source    = d.source,
+                        type      = d.type,
+                        topic     = d.topic,
+                        priority  = d.priority,
+                        payload   = d.payload,
+                        metadata  = EventMetadata(**d.metadata) if d.metadata else EventMetadata(),
+                    ))
+                except Exception:
+                    pass
+        except Exception as exc:
+            logger.warning("MongoDB query failed, fallback to in-memory: %s", exc)
+            events = event_bus.get_history(topic=topic, limit=limit)
+    else:
+        events = event_bus.get_history(topic=topic, limit=limit)
+
     return RecentEventsResponse(
         topic  = topic,
         count  = len(events),
@@ -203,11 +304,68 @@ async def get_active_topics():
 @router.get("/health", tags=["System"])
 async def health_check():
     """Health check + thống kê hệ thống"""
+    # Kiểm tra MongoDB
+    mongo_status = "unknown"
+    mongo_total  = 0
+    try:
+        from core.database import EventDocument
+        mongo_total  = await EventDocument.count()
+        mongo_status = "ok"
+    except Exception as exc:
+        mongo_status = f"error: {exc}"
+
     return {
         "status"          : "ok",
         "queue_size"      : event_bus.get_queue_size(),
         "active_topics"   : event_bus.get_active_topics(),
         "total_consumers" : event_bus.get_total_consumers(),
+        "mongodb"         : {"status": mongo_status, "total_events": mongo_total},
+    }
+
+
+# ---------------------------------------------------------------------------
+# DELETE /events - Xóa toàn bộ events (in-memory + MongoDB)
+# ---------------------------------------------------------------------------
+
+@router.delete(
+    "/events",
+    tags=["System"],
+    summary="Xóa toàn bộ events",
+    description=(
+        "Xóa **tất cả** events khỏi:\n"
+        "- In-memory history (EventBus)\n"
+        "- MongoDB collection\n\n"
+        "⚠️ Không thể hoàn tác. Frontend sẽ hiển thị 0 events sau khi clear và reconnect."
+    ),
+    responses={
+        200: {
+            "description": "Xóa thành công",
+            "content": {
+                "application/json": {
+                    "example": {"message": "Đã xóa tất cả events", "deleted_mongo": 46, "cleared_memory": True}
+                }
+            },
+        }
+    },
+)
+async def delete_all_events():
+    """Xóa toàn bộ events: in-memory history + MongoDB"""
+    # 1. Xóa in-memory history
+    event_bus.clear_history()
+
+    # 2. Xóa MongoDB
+    deleted_count = 0
+    try:
+        from core.database import EventDocument
+        result = await EventDocument.find_all().delete()
+        deleted_count = result.deleted_count if result else 0
+    except Exception as exc:
+        logger.warning("MongoDB delete all events failed: %s", exc)
+
+    return {
+        "message"       : "Đã xóa tất cả events",
+        "deleted_mongo" : deleted_count,
+        "cleared_memory": True,
     }
 
 

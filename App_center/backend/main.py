@@ -43,6 +43,15 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
     logger.info("  Event Hub starting up...")
     logger.info("=" * 60)
+
+    # Khởi tạo MongoDB (Beanie)
+    try:
+        from core.database import init_db
+        await init_db()
+        logger.info("MongoDB (Beanie) initialized ✓")
+    except Exception as exc:
+        logger.warning("MongoDB unavailable, running without persistence: %s", exc)
+
     await event_bus.start()
     logger.info("EventBus dispatcher started ✓")
     yield
@@ -81,42 +90,8 @@ Trung gian chuẩn hóa sự kiện realtime. **Producers** gửi raw events →
 
 ### Producer (gửi event)
 ```
-ws://192.168.23.46:8000/ws/producer
-ws://192.168.23.46:8000/ws/producer?source=camera_01
-```
-Gửi JSON — Face Recognition:
-```json
-{
-  "source": "face_recognition_api",
-  "type": "face_recognition",
-  "priority": "high",
-  "payload": {
-    "username":         "Nguyen Van A",
-    "matched":          true,
-    "similarity":       0.97,
-    "face_crop_base64": "<base64_string>",
-    "timestamp":        "2026-03-29T10:54:17.445206",
-    "rtsp_url":         "rtsp://camera_ip/stream",
-    "message":          "Nhận diện thành công"
-  }
-}
-```
-Gửi JSON — Fingerprint:
-```json
-{
-  "source": "fingerprint_reader_01",
-  "type": "fingerprint",
-  "priority": "high",
-  "payload": {
-    "person_id":   "EMP001",
-    "person_name": "Nguyen Van A",
-    "finger_id":   3,
-    "confidence":  0.99,
-    "action":      "entry",
-    "location":    "main_entrance",
-    "reader_id":   "FP-001"
-  }
-}
+ws://localhost:8000/ws/producer
+ws://localhost:8000/ws/producer?source=camera_01
 ```
 Nhận ACK:
 ```json
@@ -133,15 +108,107 @@ Nhận NormalizedEvent:
 {
   "id": "uuid-v4",
   "timestamp": "2026-01-01T00:00:00Z",
-  "source": "camera_01",
+  "source": "face_recognition_api",
   "type": "face_recognition",
   "topic": "security",
   "priority": "high",
-  "payload": { "person_id": "EMP001" },
+  "payload": { "..." : "..." },
   "metadata": { "normalized": true, "version": "1.0" }
 }
 ```
 > **Lưu ý:** Message đầu tiên khi kết nối là `__system__` message, bỏ qua khi `type == "__system__"`.
+
+---
+
+## 🤖 Events từ Recognition_api (`:8001`)
+
+> Hub tự động intercept `face_crop_b64` trong payload → lưu file `/mnt/faces/` → thay bằng `face_image_url` (HTTP URL) và `face_image_path`.
+
+### Xác thực khuôn mặt (`/verify3`) — mỗi 1 giây bắn 1 event
+
+**Xác thực thành công** `payload.event = "verify_matched"` — `payload.matched = true`:
+```json
+{
+  "source": "face_recognition_api", "type": "face_recognition", "priority": "high",
+  "payload": {
+    "event":           "verify_matched",
+    "phase":           "matched",
+    "matched":         true,
+    "username":        "nguyen_van_a",
+    "position":        "Nhan vien",
+    "score":           0.8542,
+    "source":          "http://192.168.x.x:8090/stream",
+    "timestamp":       "2026-04-02T10:00:00",
+    "face_image_url":  "http://192.168.x.x:8000/faces/face_xxx.jpg",
+    "face_image_path": "/mnt/faces/face_xxx.jpg",
+    "message":         "✅ Xác thực thành công: nguyen_van_a (0.8542)"
+  }
+}
+```
+
+**Có mặt nhưng không khớp** `payload.event = "verify_unmatched"` — `payload.matched = false`:
+```json
+{
+  "source": "face_recognition_api", "type": "face_recognition", "priority": "high",
+  "payload": {
+    "event":            "verify_unmatched",
+    "phase":            "scanning",
+    "matched":          false,
+    "username":         null,
+    "nearest":          "nguyen_van_a",
+    "nearest_position": "Nhan vien",
+    "score":            0.3210,
+    "source":           "http://192.168.x.x:8090/stream",
+    "timestamp":        "2026-04-02T10:00:01",
+    "face_image_url":   "http://192.168.x.x:8000/faces/face_xxx.jpg",
+    "face_image_path":  "/mnt/faces/face_xxx.jpg",
+    "message":          "❌ Không nhận diện được — gần nhất: nguyen_van_a (score=0.321)"
+  }
+}
+```
+
+> **`verify_no_face`** (không có mặt trong frame) **không** push lên Hub — chỉ trả SSE về client.
+
+---
+
+### Đăng ký khuôn mặt (`/enroll3`)
+
+**Mỗi góc chụp thành công** → `payload.event = "enroll3_angle"`:
+```json
+{
+  "source": "face_recognition_api", "type": "face_recognition", "priority": "high",
+  "payload": {
+    "event":           "enroll3_angle",
+    "step":            1,
+    "total_steps":     3,
+    "required_angle":  "THANG",
+    "face_direction":  "THANG",
+    "captured":        "THANG",
+    "username":        "nguyen_van_a",
+    "source":          "0",
+    "timestamp":       "2026-04-02T10:00:00",
+    "face_image_url":  "http://192.168.x.x:8000/faces/face_xxx.jpg",
+    "face_image_path": "/mnt/faces/face_xxx.jpg",
+    "message":         "✅ Đã chụp góc THANG cho 'nguyen_van_a'!"
+  }
+}
+```
+
+**Hoàn thành đăng ký 3 góc** → `payload.event = "enroll3_done"`:
+```json
+{
+  "source": "face_recognition_api", "type": "face_recognition", "priority": "high",
+  "payload": {
+    "event":           "enroll3_done",
+    "done":            true,
+    "username":        "nguyen_van_a",
+    "angles_captured": ["THANG", "TRAI", "PHAI"],
+    "source":          "0",
+    "timestamp":       "2026-04-02T10:00:05",
+    "message":         "✅ Đăng ký thành công 3 góc cho 'nguyen_van_a'!"
+  }
+}
+```
 
 ---
 
@@ -151,13 +218,31 @@ Nhận NormalizedEvent:
 |------|-------|
 | `face_recognition` | `security` |
 | `fingerprint` | `security` |
+| `card_reader` | `security` |
+| `custom` | `custom` |
 
 ---
 
 ## 🔑 Priority Values
 `low` · `medium` *(default)* · `high` · `urgent`
+
+---
+
+## 📋 Phân biệt loại event qua `payload.event`
+
+| `payload.event` | Nguồn | Ý nghĩa | Socket? |
+|----------------|-------|---------|---------|
+| `verify_matched` | `/verify3` | Có mặt + score ≥ 0.6 → khớp | ✅ |
+| `verify_unmatched` | `/verify3` | Có mặt + score < 0.6 → không khớp | ✅ |
+| `enroll3_angle` | `/enroll3` | Chụp thành công 1 góc | ✅ |
+| `enroll3_done` | `/enroll3` | Hoàn thành đăng ký 3 góc | ✅ |
+| `verify_no_face` | `/verify3` | Không phát hiện khuôn mặt | ❌ |
+
+**Phân biệt matched/unmatched nhanh:**
+- `payload.matched == true` → người được nhận diện, xem `payload.username` + `payload.position`
+- `payload.matched == false` → không nhận ra, xem `payload.nearest` (người gần nhất) + `payload.score`
 """,
-    version     = "1.0.0",
+    version     = "1.1.0",
     lifespan    = lifespan,
     contact     = {
         "name": "Event Hub",

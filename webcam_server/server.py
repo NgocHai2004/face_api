@@ -13,16 +13,22 @@ Dùng:
   python server.py
   # hoặc
   uvicorn server:app --host 0.0.0.0 --port 8090
+
+Camera source:
+  CAMERA_SOURCE=pi   → dùng rpicam-vid (Raspberry Pi camera module)
+  CAMERA_SOURCE=0    → /dev/video0 qua V4L2
+  CAMERA_SOURCE=rtsp://...  → RTSP stream qua FFmpeg
 """
 import asyncio
+import subprocess
 import cv2
 import threading
 import time
-import json
+import socket
 from typing import Optional
 import numpy as np
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 from fastapi.responses import StreamingResponse, HTMLResponse, Response
 from contextlib import asynccontextmanager
 
@@ -34,12 +40,17 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-CAMERA_SOURCE = os.getenv("CAMERA_SOURCE", "0")   # "0" hoặc "rtsp://..."
+CAMERA_SOURCE = os.getenv("CAMERA_SOURCE", "pi")   # "pi" | "0" | "rtsp://..."
 JPEG_QUALITY  = int(os.getenv("JPEG_QUALITY", "70"))
 TARGET_FPS    = int(os.getenv("TARGET_FPS", "20"))
 RESIZE_WIDTH  = int(os.getenv("RESIZE_WIDTH", "640"))
 HOST          = os.getenv("HOST", "0.0.0.0")
 PORT          = int(os.getenv("PORT", "8090"))
+
+# Raspberry Pi camera settings (chỉ dùng khi CAMERA_SOURCE == "pi")
+PI_WIDTH      = int(os.getenv("PI_WIDTH", "640"))
+PI_HEIGHT     = int(os.getenv("PI_HEIGHT", "480"))
+PI_FRAMERATE  = int(os.getenv("PI_FRAMERATE", str(TARGET_FPS)))
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -58,11 +69,15 @@ class FrameBroadcaster:
         self._source_label = ""
 
     def start(self, source_str: str):
-        src = self._parse(source_str)
         self._source_label = source_str
         self._running = True
-        self._thread = threading.Thread(
-            target=self._capture_loop, args=(src,), daemon=True)
+        if source_str.strip().lower() == "pi":
+            self._thread = threading.Thread(
+                target=self._capture_loop_pi, daemon=True)
+        else:
+            src = self._parse(source_str)
+            self._thread = threading.Thread(
+                target=self._capture_loop_cv2, args=(src,), daemon=True)
         self._thread.start()
 
     def _parse(self, s: str):
@@ -76,8 +91,72 @@ class FrameBroadcaster:
             return f"/dev/video{s}"
         return s
 
-    def _capture_loop(self, src):
-        # Dùng CAP_V4L2 cho device path, CAP_FFMPEG cho RTSP/HTTP
+    # ------------------------------------------------------------------
+    # Capture loop — Raspberry Pi camera via rpicam-vid (YUV420)
+    # ------------------------------------------------------------------
+    def _capture_loop_pi(self):
+        frame_size = PI_WIDTH * PI_HEIGHT * 3 // 2  # YUV420
+
+        cmd = [
+            "rpicam-vid",
+            "-t", "0",
+            "--width",     str(PI_WIDTH),
+            "--height",    str(PI_HEIGHT),
+            "--framerate", str(PI_FRAMERATE),
+            "--codec",     "yuv420",
+            "-n",
+            "-o", "-",
+        ]
+        print(f"[webcam_server] Starting Pi camera: {' '.join(cmd)}")
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+        fps_counter, fps_t0 = 0, time.monotonic()
+
+        try:
+            while self._running:
+                data = proc.stdout.read(frame_size)
+                if len(data) != frame_size:
+                    print("[webcam_server] Pi camera: incomplete frame, restarting...")
+                    break
+
+                yuv = np.frombuffer(data, dtype=np.uint8).reshape(
+                    (PI_HEIGHT * 3 // 2, PI_WIDTH)
+                )
+                frame = cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_I420)
+
+                # Optional: resize
+                h, w = frame.shape[:2]
+                if w > RESIZE_WIDTH:
+                    frame = cv2.resize(
+                        frame, (RESIZE_WIDTH, int(h * RESIZE_WIDTH / w))
+                    )
+
+                _, buf = cv2.imencode(
+                    ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY]
+                )
+                jpeg = buf.tobytes()
+
+                with self._lock:
+                    self._jpeg = jpeg
+
+                if self._loop and not self._loop.is_closed():
+                    self._loop.call_soon_threadsafe(self._event.set)
+
+                # FPS counter
+                fps_counter += 1
+                elapsed_fps = time.monotonic() - fps_t0
+                if elapsed_fps >= 2.0:
+                    self._fps_actual = fps_counter / elapsed_fps
+                    fps_counter, fps_t0 = 0, time.monotonic()
+
+        finally:
+            proc.terminate()
+            print("[webcam_server] Pi capture loop stopped")
+
+    # ------------------------------------------------------------------
+    # Capture loop — V4L2 / RTSP via OpenCV
+    # ------------------------------------------------------------------
+    def _capture_loop_cv2(self, src):
         if src.startswith("/dev/video"):
             cap = cv2.VideoCapture(src, cv2.CAP_V4L2)
         else:
@@ -160,7 +239,8 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_running_loop()
     broadcaster.register_loop(loop)
     broadcaster.start(CAMERA_SOURCE)
-    print(f"[webcam_server] Serving on http://{HOST}:{PORT}")
+    local_ip = _get_local_ip()
+    print(f"[webcam_server] Serving on http://{local_ip}:{PORT}")
     yield
     broadcaster.stop()
 
@@ -168,7 +248,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Webcam Server",
     description="Standalone MJPEG stream server — share camera realtime cho nhiều client",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -263,13 +343,26 @@ def index():
     &nbsp;|&nbsp; MJPEG URL: <code>http://{{location.hostname}}:{PORT}/stream</code>
   </div>
   <script>
-    // Hiển thị host thực tế
     document.getElementById('info').innerHTML =
       document.getElementById('info').innerHTML.replace(
         '{{location.hostname}}', location.hostname);
   </script>
 </body>
 </html>""")
+
+
+# ─────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────
+def _get_local_ip() -> str:
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+    finally:
+        s.close()
 
 
 # ─────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@
 export type EventType =
   | 'face_recognition'
   | 'fingerprint'
+  | 'card_reader'
 
 export type EventTopic =
   | 'security'
@@ -49,6 +50,7 @@ export const TOPIC_COLORS: Record<string, string> = {
 export const EVENT_TYPE_ICONS: Record<string, string> = {
   face_recognition: '👤',
   fingerprint:      '🖐',
+  card_reader:      '💳',
 }
 
 // Priority color mapping
