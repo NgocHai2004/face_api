@@ -12,6 +12,8 @@ from app.routers import stream as stream_router
 from app.routers import enroll3 as enroll3_router
 from app.routers import verify3 as verify3_router
 from app.routers import enroll_manual as enroll_manual_router
+from app.routers import enroll_nfc as enroll_nfc_router
+from app.routers import verify_card as verify_card_router
 from app.config import settings
 
 
@@ -27,103 +29,80 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Face Recognition API",
     description=(
-        "## API Nhận diện khuôn mặt – InsightFace + RTSP\n\n"
+        "## API Nhận diện khuôn mặt – InsightFace + RTSP + NFC\n\n"
+        "---\n\n"
+        "### 🚀 Đăng ký NFC + Khuôn mặt – **2 API** (tự động)\n\n"
+        "**Điều kiện thành công:** đủ 3 góc mặt **HOẶC** có thẻ NFC (hoặc cả hai).\n\n"
+        "**Bước 1 – Bắt đầu stream đăng ký (SSE):**\n"
+        "```\n"
+        "GET /enroll/nfc/stream?username=alice&position=NhanVien&source=0\n"
+        "```\n"
+        "→ Tự tạo user + session, stream camera tự nhận diện 3 góc mặt.\n"
+        "SSE events: `session_created` → `stream_started` → `angle_instruction`"
+        " → `enroll_nfc_angle` → `nfc_scanned` → `face_complete` → `stream_ended`\n\n"
+        "**Song song – NFC reader gửi thẻ (module-rfid-nfc):**\n"
+        "```\n"
+        "POST /enroll/nfc/card?username=alice&card_id=A66AB0AA\n"
+        "```\n\n"
+        "**Bước 2 – Kết thúc phiên + lưu DB:**\n"
+        "```\n"
+        "POST /enroll/nfc/finish?username=alice\n"
+        "```\n"
+        "Response thành công:\n"
+        "```json\n"
+        "{ \"success\": true, \"face_ok\": true, \"card_ok\": true,\n"
+        "  \"card_id\": \"A66AB0AA\", \"angles_captured\": [\"THANG\",\"TRAI\",\"PHAI\"],\n"
+        "  \"registered_with\": \"khuôn mặt 3 góc + thẻ NFC (A66AB0AA)\" }\n"
+        "```\n\n"
+        "**Tiện ích:**\n"
+        "- `GET  /enroll/nfc/session-status?username=alice` – Xem trạng thái session\n"
+        "- `DELETE /enroll/nfc/reset?username=alice`        – Xóa session\n\n"
         "---\n\n"
         "### 📡 Realtime Socket Events → App_center\n"
         "Đăng ký và xác thực tự động push sự kiện lên `App_center` qua WebSocket.\n\n"
         "> **Hub endpoint:** `ws://localhost:8000/ws/producer`  \n"
         "> **type:** `face_recognition` → **topic:** `security` | **priority:** `high`\n\n"
-        "| Sự kiện | `event` | Khi nào bắn | Socket? |\n"
-        "|---------|---------|-------------|--------|\n"
-        "| Chụp 1 góc đăng ký | `enroll3_angle` | Mỗi khi chụp thành công 1 góc | ✅ |\n"
-        "| Hoàn thành đăng ký | `enroll3_done` | Sau khi lưu embedding 3 góc vào DB | ✅ |\n"
-        "| Xác thực khớp | `verify_matched` | Có mặt + score ≥ 0.6 | ✅ |\n"
-        "| Xác thực không khớp | `verify_unmatched` | Có mặt + score < 0.6 | ✅ |\n"
-        "| Không có mặt | `verify_no_face` | Không phát hiện khuôn mặt trong frame | ❌ |\n\n"
+        "| Sự kiện | `event` | type | Khi nào bắn | Socket? |\n"
+        "|---------|---------|------|-------------|--------|\n"
+        "| Chụp 1 góc NFC+Face | `enroll_nfc_angle` | `nfc_enroll` | Mỗi khi chụp thành công 1 góc | ✅ |\n"
+        "| Hoàn thành NFC+Face | `enroll_nfc_done` | `nfc_enroll` | Sau khi finish | ✅ |\n"
+        "| Chụp 1 góc đăng ký | `enroll3_angle` | `face_recognition` | Mỗi khi chụp thành công 1 góc | ✅ |\n"
+        "| Hoàn thành đăng ký | `enroll3_done` | `face_recognition` | Sau khi lưu embedding 3 góc vào DB | ✅ |\n"
+        "| Xác thực khớp | `verify_matched` | `face_recognition` | Có mặt + score ≥ 0.6 | ✅ |\n"
+        "| Xác thực không khớp | `verify_unmatched` | `face_recognition` | Có mặt + score < 0.6 | ✅ |\n"
+        "| Không có mặt | `verify_no_face` | `face_recognition` | Không phát hiện khuôn mặt trong frame | ❌ |\n"
+        "| Xác thực thẻ thành công | `verify_card_matched` | `card_verify` | Thẻ hợp lệ + chưa hết hạn | ✅ |\n"
+        "| Xác thực thẻ thất bại | `verify_card_failed` | `card_verify` | Thẻ hết hạn (`expired`) hoặc thẻ lạ (`card_not_found`) | ✅ |\n"
+        "| Thẻ đã có chủ khác | `enroll_card_duplicate` | `card_verify` | Khi đăng ký thẻ đã thuộc user khác | ✅ |\n\n"
         "---\n\n"
-        "### 🎯 Đăng ký khuôn mặt tự động – SSE (3 góc)\n"
+        "### 🎯 Đăng ký khuôn mặt tự động – SSE (3 góc, chỉ mặt)\n"
         "- `GET /enroll3?username=alice&source=0[&position=NhanVien&expiry_date=2027-12-31T00:00:00]`\n\n"
         "> Mỗi góc chụp xong: trả SSE về client **đồng thời** push socket lên App_center.  \n"
-        "> SSE event có `frame_b64` (preview full frame) + `face_crop_b64` (ảnh mặt crop).  \n"
-        "> `face_crop_b64` trong socket → Hub lưu file → thay bằng `face_image_url`.\n\n"
-        "**SSE — đang chờ đúng góc:**\n"
-        "```json\n"
-        "{ \"step\": 1, \"total_steps\": 3, \"required_angle\": \"THANG\",\n"
-        "  \"direction\": \"TRAI\", \"frame_b64\": \"<base64>\", \"done\": false,\n"
-        "  \"message\": \"Bước 1/3 — Cần: THANG, đang: TRAI\" }\n"
-        "```\n\n"
-        "**SSE — chụp góc thành công (`done: false`):**\n"
-        "```json\n"
-        "{ \"event\": \"enroll3_angle\", \"step\": 1, \"total_steps\": 3,\n"
-        "  \"required_angle\": \"THANG\", \"captured\": \"THANG\",\n"
-        "  \"username\": \"alice\", \"position\": \"NhanVien\",\n"
-        "  \"expiry_date\": \"2027-12-31T00:00:00\",\n"
-        "  \"face_crop_b64\": \"<base64>\", \"frame_b64\": \"<base64>\",\n"
-        "  \"timestamp\": \"2026-04-02T10:00:00\", \"done\": false }\n"
-        "```\n\n"
-        "**SSE — hoàn tất (`done: true`):**\n"
-        "```json\n"
-        "{ \"event\": \"enroll3_done\", \"done\": true,\n"
-        "  \"username\": \"alice\", \"position\": \"NhanVien\",\n"
-        "  \"expiry_date\": \"2027-12-31T00:00:00\",\n"
-        "  \"angles_captured\": [\"THANG\",\"TRAI\",\"PHAI\"],\n"
-        "  \"timestamp\": \"2026-04-02T10:00:05\",\n"
-        "  \"message\": \"✅ Đăng ký thành công 3 góc cho 'alice'!\" }\n"
-        "```\n\n"
+        "> SSE event có `frame_b64` (preview full frame) + `face_crop_b64` (ảnh mặt crop).\n\n"
         "---\n\n"
         "### 🔍 Xác thực khuôn mặt liên tục – SSE (1s/lần)\n"
         "- `GET /verify3?source=0[&username=alice]`\n\n"
         "> Mỗi 1 giây: chụp frame → detect → so khớp DB → bắn SSE + push socket.\n\n"
-        "**SSE — không có mặt (`phase: no_face`):** — không push socket\n"
-        "```json\n"
-        "{ \"phase\": \"no_face\", \"event\": \"verify_no_face\",\n"
-        "  \"source\": \"0\", \"timestamp\": \"...\",\n"
-        "  \"message\": \"Không phát hiện khuôn mặt\" }\n"
-        "```\n\n"
-        "**SSE — có mặt, không khớp (`phase: scanning`):** — push socket ✅\n"
-        "```json\n"
-        "{ \"phase\": \"scanning\", \"event\": \"verify_unmatched\",\n"
-        "  \"username\": null, \"nearest\": \"alice\", \"nearest_position\": \"NhanVien\",\n"
-        "  \"nearest_expiry_date\": \"2027-12-31T00:00:00\",\n"
-        "  \"score\": 0.32, \"matched\": false,\n"
-        "  \"face_crop_b64\": \"<base64>\", \"frame_b64\": \"<base64>\",\n"
-        "  \"timestamp\": \"...\", \"source\": \"0\" }\n"
-        "```\n\n"
-        "**SSE — xác thực thành công (`phase: matched`):** — push socket ✅\n"
-        "```json\n"
-        "{ \"phase\": \"matched\", \"event\": \"verify_matched\",\n"
-        "  \"username\": \"alice\", \"position\": \"NhanVien\",\n"
-        "  \"expiry_date\": \"2027-12-31T00:00:00\",\n"
-        "  \"score\": 0.85, \"matched\": true,\n"
-        "  \"face_crop_b64\": \"<base64>\", \"frame_b64\": \"<base64>\",\n"
-        "  \"timestamp\": \"...\", \"source\": \"0\" }\n"
-        "```\n\n"
-        "> **NormalizedEvent consumer nhận:** `face_crop_b64` → `face_image_url` + `face_image_path`\n\n"
         "---\n\n"
         "### 🎯 Đăng ký khuôn mặt thủ công (3 góc)\n"
-        "**Bước 0 – Khởi tạo user:**\n"
-        "- `POST /enroll/init-user?username=alice[&position=NhanVien&expiry_date=2027-12-31T00:00:00]` – Kiểm tra & tạo user\n\n"
-        "**Bước 1-3 – Chụp từng góc:**\n"
-        "1. `POST /enroll/capture/thang?username=alice&source=0`\n"
-        "2. `POST /enroll/capture/trai?username=alice&source=0`\n"
-        "3. `POST /enroll/capture/phai?username=alice&source=0`\n"
-        "4. `POST /enroll/save?username=alice[&position=NhanVien&expiry_date=2027-12-31T00:00:00]` – Lưu vào DB\n\n"
-        "> Mỗi API chụp trả về `success`, `detected_angle`, `face_crop_b64`, `missing_angles`.  \n"
-        "> Nếu sai góc → gọi lại đến khi `success: true` rồi mới chuyển góc tiếp.\n\n"
+        "1. `POST /enroll/init-user?username=alice[&position=NhanVien&expiry_date=2027-12-31T00:00:00]`\n"
+        "2. `POST /enroll/capture/thang?username=alice&source=0`\n"
+        "3. `POST /enroll/capture/trai?username=alice&source=0`\n"
+        "4. `POST /enroll/capture/phai?username=alice&source=0`\n"
+        "5. `POST /enroll/save?username=alice`\n\n"
         "---\n\n"
         "### 👥 Quản lý người dùng\n"
-        "- `GET /users`                                                                   – Danh sách users (trả về `expiry_date`)\n"
+        "- `GET /users`                                                                   – Danh sách users (trả về `expiry_date`, `card_id`)\n"
         "- `PATCH /users/{username}[?new_username=x&position=y&expiry_date=2027-12-31]`  – Đổi tên / chức vụ / ngày hết hạn / ảnh\n"
         "- `DELETE /users/{username}`                                                     – Xóa 1 user\n"
         "- `DELETE /users`                                                                – Xóa tất cả\n\n"
         "> **`expiry_date`**: ISO 8601 string, VD `2027-12-31` hoặc `2027-12-31T00:00:00`.  \n"
-        "> Truyền `expiry_date=null` để xóa ngày hết hạn.  \n"
-        "> Trường `expiry_date` có trong tất cả response đăng ký, xác thực và danh sách user.\n\n"
+        "> **`card_id`**: NFC/RFID UID dạng hex in hoa (VD: `A66AB0AA`). Gán qua `/enroll/nfc/card` hoặc `/enroll/nfc/finish`.\n\n"
         "### 📋 Tiện ích đăng ký thủ công\n"
         "- `GET /enroll/status?username=alice`   – Xem góc đã chụp\n"
         "- `DELETE /enroll/reset?username=alice` – Xóa session\n"
     ),
-    version="2.3.0",
+    version="3.0.0",
     lifespan=lifespan,
 )
 
@@ -136,12 +115,20 @@ app.include_router(stream_router.router, tags=["Stream"])
 app.include_router(enroll3_router.router, tags=["Enroll 3 Angles"])
 app.include_router(verify3_router.router, tags=["Verify 3 Angles"])
 app.include_router(enroll_manual_router.router, prefix="/enroll", tags=["Enroll Manual"])
+app.include_router(enroll_nfc_router.router, tags=["Enroll NFC + Face"])
+app.include_router(verify_card_router.router, tags=["Verify Card"])
 
 
 @app.get("/", tags=["UI"])
 def index():
     """Serve giao diện web HTML/CSS/JS"""
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    return FileResponse(
+        os.path.join(STATIC_DIR, "index.html"),
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @app.get("/health", tags=["Health"])

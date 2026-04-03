@@ -10,34 +10,39 @@
   header { background: #1e293b; padding: 14px 28px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #334155; }
   header h1 { font-size: 1.15rem; font-weight: 700; color: #f1f5f9; }
 
-  .tabs { display: flex; gap: 0; border-bottom: 2px solid #334155; background: #1e293b; }
-  .tab-btn { padding: 12px 28px; border: none; background: transparent; color: #94a3b8;
-             font-size: 0.9rem; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent;
+  .tabs { display: flex; gap: 0; border-bottom: 2px solid #334155; background: #1e293b; flex-wrap: wrap; }
+  .tab-btn { padding: 12px 22px; border: none; background: transparent; color: #94a3b8;
+             font-size: 0.88rem; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent;
              transition: all .2s; margin-bottom: -2px; }
   .tab-btn:hover { color: #e2e8f0; background: #0f172a22; }
   .tab-btn.active { color: #60a5fa; border-bottom-color: #3b82f6; }
 
-  .tab-content { display: none; padding: 24px; max-width: 760px; }
+  .tab-content { display: none; padding: 24px; max-width: 820px; }
   .tab-content.active { display: block; }
 
   .card { background: #1e293b; border-radius: 14px; padding: 24px; }
   label { display: block; font-size: 0.74rem; color: #94a3b8; margin: 14px 0 5px;
           font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
   label:first-child { margin-top: 0; }
-  input[type=text] { width: 100%; padding: 9px 13px; border-radius: 8px;
-                     border: 1px solid #334155; background: #0f172a; color: #e2e8f0;
-                     font-size: 0.9rem; outline: none; transition: border .2s; }
-  input[type=text]:focus { border-color: #3b82f6; }
+  input[type=text], input[type=date] {
+    width: 100%; padding: 9px 13px; border-radius: 8px;
+    border: 1px solid #334155; background: #0f172a; color: #e2e8f0;
+    font-size: 0.9rem; outline: none; transition: border .2s; }
+  input[type=text]:focus, input[type=date]:focus { border-color: #3b82f6; }
   .hint { font-size: 0.74rem; color: #64748b; margin-top: 5px; }
 
   .btn-row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
   button { padding: 9px 20px; border-radius: 8px; border: none; cursor: pointer;
            font-size: 0.88rem; font-weight: 600; transition: all .15s; }
   button:disabled { opacity: .45; cursor: not-allowed; }
-  .btn-green { background: #16a34a; color: #fff; }
-  .btn-green:hover:not(:disabled) { background: #15803d; }
-  .btn-red   { background: #dc2626; color: #fff; }
-  .btn-red:hover:not(:disabled)   { background: #b91c1c; }
+  .btn-green  { background: #16a34a; color: #fff; }
+  .btn-green:hover:not(:disabled)  { background: #15803d; }
+  .btn-red    { background: #dc2626; color: #fff; }
+  .btn-red:hover:not(:disabled)    { background: #b91c1c; }
+  .btn-blue   { background: #2563eb; color: #fff; }
+  .btn-blue:hover:not(:disabled)   { background: #1d4ed8; }
+  .btn-orange { background: #d97706; color: #fff; }
+  .btn-orange:hover:not(:disabled) { background: #b45309; }
 
   /* ── Camera view ── */
   .cam-wrap { position: relative; background: #000; border-radius: 12px;
@@ -55,16 +60,17 @@
                        animation: pulse 1s infinite; }
   .step-badge.done   { background: #166534; color: #86efac; border-color: #22c55e; }
   .step-badge.fail   { background: #7f1d1d; color: #fca5a5; border-color: #ef4444; }
+  .step-badge.card   { background: #1e3a4f; color: #67e8f9; border-color: #0891b2; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
 
   /* ── User table ── */
-  .user-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 14px; }
-  .user-table th { background: #1e293b; color: #94a3b8; padding: 8px 12px; text-align: left;
-                   font-weight: 700; font-size: 0.75rem; letter-spacing:.05em; text-transform:uppercase; }
-  .user-table td { padding: 10px 12px; border-bottom: 1px solid #1e293b; vertical-align: middle; }
+  .user-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; margin-top: 14px; }
+  .user-table th { background: #1e293b; color: #94a3b8; padding: 8px 10px; text-align: left;
+                   font-weight: 700; font-size: 0.73rem; letter-spacing:.05em; text-transform:uppercase; }
+  .user-table td { padding: 9px 10px; border-bottom: 1px solid #1e293b; vertical-align: middle; }
   .user-table tr:hover td { background: #1e293b44; }
-  .btn-del { padding: 4px 12px; border-radius: 6px; border: none; background: #7f1d1d;
-             color: #fca5a5; font-size: 0.8rem; cursor: pointer; font-weight: 600; }
+  .btn-del { padding: 4px 10px; border-radius: 6px; border: none; background: #7f1d1d;
+             color: #fca5a5; font-size: 0.78rem; cursor: pointer; font-weight: 600; }
   .btn-del:hover { background: #991b1b; }
   .face-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
 
@@ -79,6 +85,7 @@
               border: 1px solid #334155; min-height: 54px; margin-top: 12px; }
   .info-box.ok  { border-color: #22c55e; }
   .info-box.err { border-color: #ef4444; }
+  .info-box.warn { border-color: #f59e0b; }
 
   /* ── Angle result cards ── */
   .angle-cards { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
@@ -87,6 +94,23 @@
                  font-size: 0.8rem; line-height: 1.8; }
   .angle-card.ok  { border-color: #22c55e; }
   .angle-card.err { border-color: #ef4444; }
+
+  /* ── NFC card badge ── */
+  .nfc-badge { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px;
+               border-radius: 10px; background: #0c2340; border: 2px solid #0891b2;
+               color: #67e8f9; font-size: 0.9rem; font-weight: 700; margin-top: 12px; }
+  .nfc-badge.waiting { border-color: #334155; color: #475569; background: #0f172a; }
+  .nfc-badge.scanned { border-color: #0891b2; color: #67e8f9; background: #0c2340; animation: pulse 1.5s infinite; }
+  .nfc-badge.done    { border-color: #22c55e; color: #86efac; background: #052e16; animation: none; }
+
+  /* ── Status grid (NFC tab) ── */
+  .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  .status-cell { background: #0f172a; border-radius: 10px; padding: 14px 16px;
+                 border: 2px solid #334155; text-align: center; }
+  .status-cell .label { font-size: 0.72rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+  .status-cell .value { font-size: 1.1rem; font-weight: 700; margin-top: 6px; }
+  .status-cell.ok   { border-color: #22c55e; }
+  .status-cell.card { border-color: #0891b2; }
 </style>
 </head>
 <body>
@@ -94,17 +118,18 @@
 <header>
   <span style="font-size:1.4rem">🧠</span>
   <h1>Face Recognition API</h1>
+  <span style="margin-left:auto;font-size:.75rem;color:#475569">v3.0</span>
 </header>
 
 <div class="tabs">
   <button class="tab-btn active" onclick="switchTab(event,'enroll')">🎯 Đăng ký 3 góc</button>
-  <button class="tab-btn"        onclick="switchTab(event,'verify')">🔍 Xác thực 3 góc</button>
+  <button class="tab-btn"        onclick="switchTab(event,'nfc')">🔐 Đăng ký NFC + Mặt</button>
+  <button class="tab-btn"        onclick="switchTab(event,'verify')">🔍 Xác thực</button>
   <button class="tab-btn"        onclick="switchTab(event,'users');loadUsers()">👥 Quản lý User</button>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
      TAB 1 — ĐĂNG KÝ 3 GÓC TỰ ĐỘNG (SSE)
-     THẲNG → TRÁI → PHẢI, tự phát hiện hướng 1fps
 ══════════════════════════════════════════════════════════ -->
 <div id="tab-enroll" class="tab-content active">
   <div class="card">
@@ -114,20 +139,19 @@
     <label>Chức vụ (position) <span style="color:#ef4444">*</span></label>
     <input type="text" id="en-position" placeholder="VD: Nhân viên, Quản lý, Bảo vệ (bắt buộc)" />
     <label>Ngày hết hạn (expiry date)</label>
-    <input type="date" id="en-expiry" style="width:100%;padding:9px 13px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:0.9rem;outline:none;" />
+    <input type="date" id="en-expiry" />
     <p class="hint">Để trống nếu không giới hạn thời gian truy cập</p>
     <label>Camera source</label>
     <input type="text" id="en-source" value="http://192.168.21.47:8090/stream" placeholder="0 = webcam, hoặc HTTP/RTSP URL" />
-    <p class="hint">Hệ thống tự nhận diện hướng mặt: THẲNG → TRÁI → PHẢI, tự động chụp khi đúng hướng</p>
+    <p class="hint">Hệ thống tự nhận diện hướng mặt: THẲNG → TRÁI → PHẢI</p>
 
     <div class="btn-row">
       <button class="btn-green" id="en-start" onclick="startEnroll()">🎯 Bắt đầu đăng ký</button>
       <button class="btn-red"   id="en-stop"  onclick="stopEnroll()" disabled>⏹ Huỷ</button>
     </div>
-    <!-- Nút xác nhận ghi đè (ẩn mặc định) -->
     <div id="en-confirm-row" style="display:none;gap:10px;margin-top:10px;flex-wrap:wrap" class="btn-row">
-      <button class="btn-green" onclick="confirmEnroll()" style="background:#d97706">⚠️ Ghi đè — Đăng ký lại</button>
-      <button class="btn-red"   onclick="hideConfirm()">✖ Huỷ</button>
+      <button class="btn-orange" onclick="confirmEnroll()">⚠️ Ghi đè — Đăng ký lại</button>
+      <button class="btn-red"    onclick="hideConfirm()">✖ Huỷ</button>
     </div>
 
     <div class="steps" id="en-steps" style="display:none;margin-top:14px">
@@ -158,29 +182,110 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     TAB 2 — XÁC THỰC (AUTO-LOOP, 1s/lần)
-     Mỗi 1s: chụp frame → so sánh DB → score ≥ 0.7 → thành công
-     Thành công → tiếp tục quét ngay
+     TAB 2 — ĐĂNG KÝ NFC + KHUÔN MẶT (KẾT HỢP)
+     • Camera tự phát hiện 3 góc (song song)
+     • NFC reader tự gửi card_id khi đặt thẻ
+     • Nút "Kết thúc" → lưu DB nếu đủ điều kiện
+══════════════════════════════════════════════════════════ -->
+<div id="tab-nfc" class="tab-content">
+  <div class="card">
+    <p class="hint" style="font-size:0.82rem;color:#94a3b8;margin-bottom:6px">
+      💡 Đăng ký đồng thời <b>khuôn mặt 3 góc</b> + <b>thẻ NFC</b>. Chỉ cần 1 trong 2 để hoàn tất.
+    </p>
+
+    <label>Tên người dùng <span style="color:#ef4444">*</span></label>
+    <input type="text" id="nfc-username" placeholder="VD: nguyen_van_a" />
+    <label>Chức vụ <span style="color:#ef4444">*</span></label>
+    <input type="text" id="nfc-position" placeholder="VD: Nhân viên, Quản lý, Bảo vệ" />
+    <label>Ngày hết hạn</label>
+    <input type="date" id="nfc-expiry" />
+    <label>Camera source</label>
+    <input type="text" id="nfc-source" value="http://192.168.21.47:8090/stream" placeholder="0 = webcam, hoặc HTTP/RTSP URL" />
+
+    <div class="btn-row">
+      <button class="btn-green"  id="nfc-start-btn"  onclick="nfcStartSession()">🚀 Bắt đầu đăng ký</button>
+      <button class="btn-orange" id="nfc-finish-btn" onclick="nfcFinish()" disabled>🏁 Kết thúc & Lưu</button>
+      <button class="btn-red"    id="nfc-cancel-btn" onclick="nfcCancel()" disabled>⏹ Huỷ</button>
+    </div>
+
+    <!-- Trạng thái session -->
+    <div id="nfc-session-info" style="display:none;margin-top:16px">
+
+      <!-- Status grid -->
+      <div class="status-grid">
+        <div class="status-cell" id="nfc-face-cell">
+          <div class="label">🎭 Khuôn mặt</div>
+          <div class="value" id="nfc-face-val" style="color:#475569">0 / 3 góc</div>
+        </div>
+        <div class="status-cell" id="nfc-card-cell">
+          <div class="label">💳 Thẻ NFC</div>
+          <div class="value" id="nfc-card-val" style="color:#475569">Chưa quét</div>
+        </div>
+      </div>
+
+      <!-- NFC badge -->
+      <div class="nfc-badge waiting" id="nfc-badge">
+        💳 Chờ quét thẻ NFC (đặt thẻ lên đầu đọc)...
+      </div>
+
+      <!-- Step badges -->
+      <div class="steps" style="margin-top:12px">
+        <div class="step-badge" id="nfc-s-THANG">⬜ THẲNG</div>
+        <div class="step-badge" id="nfc-s-TRAI" >⬜ TRÁI</div>
+        <div class="step-badge" id="nfc-s-PHAI" >⬜ PHẢI</div>
+      </div>
+
+      <!-- Camera + crops -->
+      <div style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap">
+        <div style="flex:2;min-width:220px">
+          <div class="cam-wrap">
+            <div class="cam-placeholder" id="nfc-ph">🔐</div>
+            <img id="nfc-frame" style="display:none;width:100%" alt="nfc enroll frame" />
+          </div>
+        </div>
+        <div style="flex:1;min-width:180px">
+          <div style="font-size:.75rem;color:#64748b;margin-bottom:6px">✂️ Góc đã chụp</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="angle-card" id="nfc-c-THANG"><b>THẲNG</b><br>—</div>
+            <div class="angle-card" id="nfc-c-TRAI" ><b>TRÁI</b><br>—</div>
+            <div class="angle-card" id="nfc-c-PHAI" ><b>PHẢI</b><br>—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-box" id="nfc-info" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     TAB 3 — XÁC THỰC (AUTO-LOOP, 1s/lần)
 ══════════════════════════════════════════════════════════ -->
 <div id="tab-verify" class="tab-content">
   <div class="card">
     <label>Camera source</label>
-    <input type="text" id="vr-source" placeholder="0 = webcam, hoặc RTSP URL" value="0" />
+    <input type="text" id="vr-source" placeholder="0 = webcam, hoặc RTSP URL" value="http://192.168.21.47:8090/stream" />
     <label>Username (tùy chọn — để trống = tìm toàn bộ DB)</label>
     <input type="text" id="vr-username" placeholder="VD: nguyen_van_a" />
-    <p class="hint">Hệ thống tự động quét liên tục — 1 giây/lần, so sánh khuôn mặt với DB (score ≥ 0.7)</p>
+    <p class="hint">Hệ thống tự động quét liên tục — khuôn mặt 1 giây/lần (score ≥ 0.6) + thẻ NFC song song</p>
 
     <div class="btn-row">
       <button class="btn-red" id="vr-stop" onclick="stopVerifySystem()">⏹ Dừng hệ thống</button>
     </div>
 
-    <!-- Trạng thái -->
-    <div id="vr-phase-badge" style="margin-top:12px;padding:8px 16px;border-radius:8px;
-         background:#0f172a;border:1px solid #334155;font-size:0.85rem;color:#94a3b8;display:inline-block">
-      ⏳ Đang khởi động...
+    <!-- Status badges -->
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center">
+      <div id="vr-phase-badge" style="padding:8px 16px;border-radius:8px;
+           background:#0f172a;border:1px solid #334155;font-size:0.85rem;color:#94a3b8;display:inline-block">
+        ⏳ Đang khởi động...
+      </div>
+      <div id="vr-card-badge" style="padding:8px 16px;border-radius:8px;
+           background:#0f172a;border:1px solid #334155;font-size:0.85rem;color:#475569;display:inline-block">
+        💳 Chờ quét thẻ...
+      </div>
     </div>
 
-    <!-- Camera preview + face crop -->
+    <!-- Camera + face + card result -->
     <div style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap">
       <div style="flex:2;min-width:220px">
         <div class="cam-wrap">
@@ -188,10 +293,14 @@
           <img id="vr-frame" style="display:none;width:100%" alt="verify frame" />
         </div>
       </div>
-      <div style="flex:1;min-width:160px">
-        <div style="font-size:.75rem;color:#64748b;margin-bottom:6px">✂️ Khuôn mặt</div>
-        <div class="angle-card" id="vr-face-card" style="min-height:120px">
-          <b>—</b>
+      <div style="flex:1;min-width:160px;display:flex;flex-direction:column;gap:8px">
+        <div>
+          <div style="font-size:.75rem;color:#64748b;margin-bottom:6px">👤 Khuôn mặt</div>
+          <div class="angle-card" id="vr-face-card" style="min-height:100px"><b>—</b></div>
+        </div>
+        <div>
+          <div style="font-size:.75rem;color:#64748b;margin-bottom:6px">💳 Thẻ từ</div>
+          <div class="angle-card" id="vr-card-card" style="min-height:100px"><b>—</b></div>
         </div>
       </div>
     </div>
@@ -201,24 +310,24 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     TAB 3 — QUẢN LÝ USER
+     TAB 4 — QUẢN LÝ USER
 ══════════════════════════════════════════════════════════ -->
 <div id="tab-users" class="tab-content">
 
   <!-- Modal sửa user -->
-  <div id="edit-modal" style="display:none;position:fixed;inset:0;background:#000a;z-index:999;display:none;align-items:center;justify-content:center">
-    <div style="background:#1e293b;border-radius:14px;padding:28px;min-width:320px;max-width:400px;width:90%">
-      <h3 style="margin:0 0 16px;font-size:1.1rem">✏️ Sửa người dùng: <span id="edit-username-label" style="color:#60a5fa"></span></h3>
+  <div id="edit-modal" style="display:none;position:fixed;inset:0;background:#000a;z-index:999;align-items:center;justify-content:center">
+    <div style="background:#1e293b;border-radius:14px;padding:28px;min-width:320px;max-width:420px;width:90%;max-height:90vh;overflow-y:auto">
+      <h3 style="margin:0 0 16px;font-size:1.1rem">✏️ Sửa: <span id="edit-username-label" style="color:#60a5fa"></span></h3>
       <label style="font-size:.8rem;color:#94a3b8">Tên mới</label>
       <input id="edit-new-username" type="text" placeholder="Để trống nếu không đổi tên"
              style="width:100%;padding:8px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;margin:6px 0 14px;box-sizing:border-box"/>
       <label style="font-size:.8rem;color:#94a3b8">Chức vụ mới</label>
-      <input id="edit-position" type="text" placeholder="VD: Nhân viên, Quản lý, Bảo vệ (để trống nếu không đổi)"
+      <input id="edit-position" type="text" placeholder="VD: Nhân viên, Quản lý, Bảo vệ"
              style="width:100%;padding:8px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;margin:6px 0 14px;box-sizing:border-box"/>
       <label style="font-size:.8rem;color:#94a3b8">Ngày hết hạn mới</label>
       <input id="edit-expiry" type="date"
              style="width:100%;padding:8px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;margin:6px 0 14px;box-sizing:border-box"/>
-      <p style="font-size:.74rem;color:#64748b;margin-top:-10px;margin-bottom:10px">Để trống nếu không thay đổi. Xóa ngày cũ: nhập rồi xóa chọn.</p>
+      <p style="font-size:.74rem;color:#64748b;margin-top:-10px;margin-bottom:10px">Để trống nếu không thay đổi.</p>
       <label style="font-size:.8rem;color:#94a3b8">Ảnh khuôn mặt mới</label>
       <input id="edit-face-file" type="file" accept="image/*"
              style="width:100%;margin:6px 0 18px;color:#94a3b8"/>
@@ -227,7 +336,7 @@
         <button class="btn-green" onclick="submitEditUser()">💾 Lưu</button>
         <button class="btn-red"   onclick="closeEditModal()">✖ Huỷ</button>
       </div>
-      <div id="edit-info" style="margin-top:10px"></div>
+      <div id="edit-info" style="margin-top:10px;font-size:0.84rem"></div>
     </div>
   </div>
 
@@ -236,6 +345,7 @@
       <button class="btn-green" onclick="loadUsers()">🔄 Tải lại</button>
       <button class="btn-red"   onclick="deleteAllUsers()">🗑 Xóa tất cả</button>
     </div>
+    <div style="overflow-x:auto">
     <table class="user-table">
       <thead>
         <tr>
@@ -243,15 +353,17 @@
           <th>Username</th>
           <th>Chức vụ</th>
           <th>Khuôn mặt</th>
+          <th>💳 Thẻ NFC</th>
           <th>Ngày hết hạn</th>
           <th>Ngày tạo</th>
           <th></th>
         </tr>
       </thead>
       <tbody id="user-tbody">
-        <tr><td colspan="7" style="color:#64748b;padding:16px">Nhấn 🔄 để tải danh sách</td></tr>
+        <tr><td colspan="8" style="color:#64748b;padding:16px">Nhấn 🔄 để tải danh sách</td></tr>
       </tbody>
     </table>
+    </div>
     <div class="info-box" id="users-info" style="margin-top:12px"></div>
   </div>
 </div>
@@ -263,29 +375,26 @@
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     document.getElementById('tab-' + name).classList.add('active');
     e.target.classList.add('active');
-    // Tự khởi động hệ thống xác thực khi chuyển sang tab verify
     if (name === 'verify') _onTabVerify();
   }
 
   const LABEL = { THANG: 'THẲNG', TRAI: 'TRÁI', PHAI: 'PHẢI' };
 
   // ══════════════════════════════════════════════════════════
-  // ĐĂNG KÝ 3 GÓC TỰ ĐỘNG (SSE)
+  // TAB 1 — ĐĂNG KÝ 3 GÓC TỰ ĐỘNG (SSE)
   // ══════════════════════════════════════════════════════════
   let enrollES = null;
 
   async function startEnroll() {
-    const username   = document.getElementById('en-username').value.trim();
-    const position   = document.getElementById('en-position').value.trim();
-    const source     = document.getElementById('en-source').value.trim() || '0';
-    const expiryRaw  = document.getElementById('en-expiry').value.trim();
+    const username  = document.getElementById('en-username').value.trim();
+    const position  = document.getElementById('en-position').value.trim();
+    const source    = document.getElementById('en-source').value.trim() || '0';
+    const expiryRaw = document.getElementById('en-expiry').value.trim();
     if (!username) { alert('Nhập tên người dùng'); return; }
     if (!position) { alert('Nhập chức vụ (position) — bắt buộc'); return; }
 
-    // Ẩn nút confirm nếu đang hiện
     document.getElementById('en-confirm-row').style.display = 'none';
 
-    // Kiểm tra user đã tồn tại và có khuôn mặt chưa
     try {
       const res   = await fetch('/users');
       const users = await res.json();
@@ -297,7 +406,7 @@
         document.getElementById('en-confirm-row').style.display = 'flex';
         return;
       }
-    } catch(e) { /* bỏ qua lỗi fetch, tiếp tục */ }
+    } catch(e) { /* bỏ qua */ }
 
     _doEnroll(username, source, position, expiryRaw);
   }
@@ -319,8 +428,6 @@
 
   function _doEnroll(username, source, position, expiryRaw) {
     if (enrollES) { enrollES.close(); enrollES = null; }
-
-    // Reset UI
     ['THANG','TRAI','PHAI'].forEach(a => {
       setBadge('en-s-'+a, 'pending', '⬜ '+LABEL[a]);
       const card = document.getElementById('en-c-'+a);
@@ -343,34 +450,23 @@
 
     enrollES.onmessage = function(e) {
       const d = JSON.parse(e.data);
-
       if (d.error) {
         document.getElementById('en-info').textContent = '❌ ' + d.error;
         document.getElementById('en-info').className = 'info-box err';
         onEnrollDone(); return;
       }
-
-      // Thông báo trạng thái user
       if (d.user_status) {
-        const cls = d.user_status === 'created' ? 'ok' : '';
         document.getElementById('en-info').textContent = d.message || '';
-        document.getElementById('en-info').className = 'info-box ' + cls;
+        document.getElementById('en-info').className = 'info-box' + (d.user_status==='created'?' ok':'');
         return;
       }
-
-      if (d.frame_b64) {
-        document.getElementById('en-frame').src = 'data:image/jpeg;base64,' + d.frame_b64;
-      }
-
-      // Đang chờ đúng hướng
+      if (d.frame_b64) document.getElementById('en-frame').src = 'data:image/jpeg;base64,' + d.frame_b64;
       if (!d.captured && !d.done && d.required_angle) {
         setBadge('en-s-'+d.required_angle, 'active', '🔵 '+LABEL[d.required_angle]);
         document.getElementById('en-info').textContent = d.message || '';
         document.getElementById('en-info').className = 'info-box';
         return;
       }
-
-      // Đã chụp 1 góc thành công
       if (d.captured) {
         setBadge('en-s-'+d.captured, 'done', '✅ '+LABEL[d.captured]);
         const card = document.getElementById('en-c-'+d.captured);
@@ -383,8 +479,6 @@
         document.getElementById('en-info').className = 'info-box ok';
         return;
       }
-
-      // Hoàn tất
       if (d.done) {
         const ok = !d.error;
         const expiryStr = d.expiry_date ? ` — Hết hạn: ${d.expiry_date.substring(0,10)}` : '';
@@ -395,10 +489,8 @@
         enrollES.close(); enrollES = null;
         onEnrollDone(); return;
       }
-
       document.getElementById('en-info').textContent = d.message || '';
     };
-
     enrollES.onerror = function() {
       document.getElementById('en-info').textContent = '❌ Mất kết nối camera';
       document.getElementById('en-info').className = 'info-box err';
@@ -420,11 +512,373 @@
   }
 
   // ══════════════════════════════════════════════════════════
-  // XÁC THỰC — QUÉT LIÊN TỤC 1s/lần
-  // scanning: chụp frame → so sánh DB → score ≥ 0.7 → matched
-  // matched  → countdown 10s → tiếp tục
+  // TAB 2 — ĐĂNG KÝ NFC + KHUÔN MẶT
   // ══════════════════════════════════════════════════════════
-  let verifyES      = null;
+  let nfcES        = null;   // SSE camera (Recognition API /enroll/nfc/stream)
+  let nfcNfcES     = null;   // SSE thẻ từ (NFC module /api/enroll/scan) — tự reconnect
+  let nfcActive    = false;
+  let nfcAngles    = {};     // { THANG: bool, TRAI: bool, PHAI: bool }
+  let nfcCardId    = null;
+  let nfcUsername  = null;
+  // NFC module base URL (same hostname, port 8080)
+  const NFC_MODULE_URL = `http://${location.hostname}:8080`;
+
+  function _nfcSetInfo(msg, cls='') {
+    const el = document.getElementById('nfc-info');
+    el.innerHTML = msg;
+    el.className = 'info-box' + (cls ? ' '+cls : '');
+  }
+
+  function _nfcUpdateStatus() {
+    const faceCount = Object.keys(nfcAngles).length;
+    const faceCell  = document.getElementById('nfc-face-cell');
+    const faceVal   = document.getElementById('nfc-face-val');
+    const cardCell  = document.getElementById('nfc-card-cell');
+    const cardVal   = document.getElementById('nfc-card-val');
+
+    faceVal.textContent = `${faceCount} / 3 góc`;
+    faceVal.style.color = faceCount === 3 ? '#4ade80' : faceCount > 0 ? '#fbbf24' : '#475569';
+    if (faceCount === 3) { faceCell.classList.add('ok'); } else { faceCell.classList.remove('ok'); }
+
+    if (nfcCardId) {
+      cardVal.textContent = nfcCardId;
+      cardVal.style.color = '#67e8f9';
+      cardCell.classList.add('card');
+      // NFC badge
+      const badge = document.getElementById('nfc-badge');
+      badge.className = 'nfc-badge done';
+      badge.innerHTML = `💳 Đã quét: <b>${nfcCardId}</b>`;
+    } else {
+      cardVal.textContent = 'Chưa quét';
+      cardVal.style.color = '#475569';
+      cardCell.classList.remove('card');
+    }
+
+    // Enable finish button if at least one condition met
+    const ready = faceCount === 3 || nfcCardId !== null;
+    document.getElementById('nfc-finish-btn').disabled = !ready || !nfcActive;
+  }
+
+  async function nfcStartSession() {
+    const username  = document.getElementById('nfc-username').value.trim();
+    const position  = document.getElementById('nfc-position').value.trim();
+    const source    = document.getElementById('nfc-source').value.trim() || '0';
+    const expiryRaw = document.getElementById('nfc-expiry').value.trim();
+    if (!username) { alert('Nhập tên người dùng'); return; }
+    if (!position) { alert('Nhập chức vụ (position) — bắt buộc'); return; }
+
+    // Reset state
+    nfcAngles   = {};
+    nfcCardId   = null;
+    nfcUsername = username;
+    nfcActive   = true;
+
+    // Reset UI
+    ['THANG','TRAI','PHAI'].forEach(a => {
+      setBadge('nfc-s-'+a, 'pending', '⬜ '+LABEL[a]);
+      const card = document.getElementById('nfc-c-'+a);
+      card.className = 'angle-card';
+      card.innerHTML = `<b>${LABEL[a]}</b><br>—`;
+    });
+    document.getElementById('nfc-badge').className = 'nfc-badge waiting';
+    document.getElementById('nfc-badge').innerHTML = '💳 Chờ quét thẻ NFC (đặt thẻ lên đầu đọc)...';
+    document.getElementById('nfc-ph').style.display = 'flex';
+    document.getElementById('nfc-frame').style.display = 'none';
+    document.getElementById('nfc-session-info').style.display = 'block';
+    document.getElementById('nfc-start-btn').disabled  = true;
+    document.getElementById('nfc-finish-btn').disabled = true;
+    document.getElementById('nfc-cancel-btn').disabled = false;
+
+    _nfcSetInfo('⏳ Đang khởi tạo session...');
+
+    // Step 1: POST /enroll/nfc/start
+    let startParams = `username=${encodeURIComponent(username)}&position=${encodeURIComponent(position)}`;
+    if (expiryRaw) startParams += `&expiry_date=${encodeURIComponent(expiryRaw)}`;
+
+    try {
+      const res  = await fetch(`/enroll/nfc/start?${startParams}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        _nfcSetInfo(`❌ ${data.detail || JSON.stringify(data)}`, 'err');
+        nfcActive = false;
+        document.getElementById('nfc-start-btn').disabled = false;
+        document.getElementById('nfc-cancel-btn').disabled = true;
+        return;
+      }
+      _nfcSetInfo(`✅ ${data.message || 'Session đã khởi tạo.'} Hãy quay mặt và/hoặc đặt thẻ lên đầu đọc.`, 'ok');
+    } catch(e) {
+      _nfcSetInfo(`❌ Không kết nối được API: ${e}`, 'err');
+      nfcActive = false;
+      document.getElementById('nfc-start-btn').disabled = false;
+      return;
+    }
+
+    _nfcUpdateStatus();
+
+    // Step 2: Connect SSE stream for camera (Recognition API face detection)
+    if (nfcES) { nfcES.close(); nfcES = null; }
+    const streamUrl = `/enroll/nfc/stream?username=${encodeURIComponent(username)}&source=${encodeURIComponent(source)}`;
+    nfcES = new EventSource(streamUrl);
+
+    nfcES.onmessage = function(ev) {
+      const d = JSON.parse(ev.data);
+
+      if (d.error) {
+        _nfcSetInfo(`❌ ${d.error}`, 'err');
+        return;
+      }
+
+      // Camera frame preview
+      if (d.frame_b64) {
+        document.getElementById('nfc-ph').style.display = 'none';
+        document.getElementById('nfc-frame').style.display = 'block';
+        document.getElementById('nfc-frame').src = 'data:image/jpeg;base64,' + d.frame_b64;
+      }
+
+      // Angle instruction
+      if (d.event === 'angle_instruction') {
+        setBadge('nfc-s-'+d.required_angle, 'active', '🔵 '+LABEL[d.required_angle]);
+        // keep existing nfc-info unless card already shown
+        if (!nfcCardId) _nfcSetInfo(d.message || '');
+      }
+
+      // Angle mismatch
+      if (d.event === 'angle_mismatch') {
+        if (d.frame_b64) document.getElementById('nfc-frame').src = 'data:image/jpeg;base64,' + d.frame_b64;
+        if (!nfcCardId) _nfcSetInfo(d.message || '');
+      }
+
+      // Angle captured
+      if (d.event === 'enroll_nfc_angle' && d.captured) {
+        nfcAngles[d.captured] = true;
+        setBadge('nfc-s-'+d.captured, 'done', '✅ '+LABEL[d.captured]);
+        const card = document.getElementById('nfc-c-'+d.captured);
+        card.className = 'angle-card ok';
+        const cropImg = d.face_crop_b64
+          ? `<img src="data:image/jpeg;base64,${d.face_crop_b64}" style="width:100%;border-radius:6px;margin:4px 0"/>`
+          : '';
+        card.innerHTML = `<b>${LABEL[d.captured]}</b><br>${cropImg}<span style="color:#4ade80;font-size:.74rem">✅</span>`;
+        _nfcUpdateStatus();
+        _nfcSetInfo(d.message || '', 'ok');
+      }
+
+      // All faces captured
+      if (d.event === 'face_complete') {
+        _nfcSetInfo('✅ <b>Đã đủ 3 góc mặt!</b> Nhấn "Kết thúc & Lưu" để hoàn tất đăng ký.', 'ok');
+        _nfcUpdateStatus();
+      }
+
+      // Stream ended (server closed after finish)
+      if (d.event === 'stream_ended') {
+        if (nfcES) { nfcES.close(); nfcES = null; }
+      }
+    };
+
+    nfcES.onerror = function() {
+      // SSE closed by server (finish was called) — no action needed
+      if (nfcES) { nfcES.close(); nfcES = null; }
+    };
+
+    // Step 3: Connect SSE to NFC module — chờ quét thẻ, tự reconnect khi hết timeout
+    _nfcConnectCardSSE(username);
+  }
+
+  // Dùng fetch+ReadableStream thay vì EventSource để kiểm soát reconnect hoàn toàn
+  function _nfcConnectCardSSE(username) {
+    if (!nfcActive || nfcCardId) return;
+
+    const ctrl = new AbortController();
+    nfcNfcES = ctrl;
+
+    const nfcUrl = `${NFC_MODULE_URL}/api/enroll/scan?username=${encodeURIComponent(username)}&timeout=90`;
+
+    (async () => {
+      // _done = true khi stream kết thúc bình thường (registered/register_error/timeout/error)
+      // Dùng để tránh reconnect sau khi ctrl.abort() được gọi nhưng reader.read() trả về done=true
+      let _done = false;
+
+      try {
+        const resp = await fetch(nfcUrl, { signal: ctrl.signal });
+        if (!resp.ok || !resp.body) {
+          if (nfcActive && !nfcCardId) setTimeout(() => _nfcConnectCardSSE(username), 3000);
+          return;
+        }
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+
+          const lines = buf.split('\n');
+          buf = lines.pop();
+
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            let d;
+            try { d = JSON.parse(line.slice(5).trim()); } catch(e) { continue; }
+
+            if (d.event === 'waiting') {
+              const badge = document.getElementById('nfc-badge');
+              if (badge && badge.className.includes('waiting')) {
+                badge.innerHTML = `💳 Chờ quét thẻ NFC... <span style="color:#475569;font-size:.8rem">(${NFC_MODULE_URL})</span>`;
+              }
+            }
+
+            if (d.event === 'nfc_scanned' && d.card_id) {
+              nfcCardId = d.card_id;
+              _nfcUpdateStatus();
+              _nfcSetInfo(`💳 Đã quét thẻ NFC: <b>${d.card_id}</b> — đang đăng ký...`, 'ok');
+              // Gọi API để lưu card_id vào session đăng ký
+              try {
+                const cardRes = await fetch(
+                  `/enroll/nfc/card?username=${encodeURIComponent(username)}&card_id=${encodeURIComponent(d.card_id)}`,
+                  { method: 'POST' }
+                );
+                if (cardRes.ok) {
+                  _nfcUpdateStatus();
+                  _nfcSetInfo(`💳 Đã quét thẻ NFC: <b>${d.card_id}</b> — đã đăng ký thành công vào session.`, 'ok');
+                } else {
+                  const errData = await cardRes.json().catch(() => ({}));
+                  _nfcSetInfo(`⚠️ Quét thẻ OK nhưng lỗi lưu session: ${errData.detail || cardRes.status}`, 'warn');
+                }
+              } catch(fetchErr) {
+                _nfcSetInfo(`⚠️ Quét thẻ OK nhưng không thể gọi API: ${fetchErr}`, 'warn');
+              }
+            }
+
+            if (d.event === 'registered') {
+              _done = true;
+              _nfcUpdateStatus();
+              _nfcSetInfo(`💳 Đã quét thẻ NFC: <b>${nfcCardId}</b> — đã đăng ký thành công vào session.`, 'ok');
+              reader.cancel();  // cancel reader → stream loop sẽ break
+              return;           // thoát async IIFE
+            }
+
+            if (d.event === 'register_error') {
+              _done = true;
+              _nfcSetInfo(`⚠️ Quét thẻ OK nhưng gặp lỗi: ${d.error}`, 'warn');
+              reader.cancel();
+              return;
+            }
+
+            if (d.event === 'timeout') {
+              _done = true;
+              // Hết 90s — reconnect ngay nếu chưa có thẻ
+              reader.cancel();
+              if (nfcActive && !nfcCardId) setTimeout(() => _nfcConnectCardSSE(username), 300);
+              return;
+            }
+
+            if (d.event === 'error') {
+              _done = true;
+              reader.cancel();
+              return;
+            }
+
+            if (d.event === 'busy') {
+              // Session cũ đang chạy — đợi 2s rồi thử lại
+              reader.cancel();
+              if (nfcActive && !nfcCardId) setTimeout(() => _nfcConnectCardSSE(username), 2000);
+              return;
+            }
+          }
+        }
+
+        // Vòng while kết thúc do done=true:
+        // - Nếu _done=true → đã xử lý xong (registered/timeout/etc) → không reconnect
+        // - Nếu _done=false → stream đóng bất ngờ → reconnect
+        if (!_done && nfcActive && !nfcCardId) {
+          setTimeout(() => _nfcConnectCardSSE(username), 500);
+        }
+
+      } catch(e) {
+        if (_done) return;           // đã xử lý xong, ignore
+        if (e.name === 'AbortError') return;  // cancel() / abort() intentional
+        // Network error thực sự — retry
+        if (nfcActive && !nfcCardId) setTimeout(() => _nfcConnectCardSSE(username), 3000);
+      }
+    })();
+  }
+
+  async function nfcFinish() {
+    if (!nfcUsername) return;
+    document.getElementById('nfc-finish-btn').disabled = true;
+    _nfcSetInfo('⏳ Đang lưu dữ liệu...');
+
+    try {
+      const res  = await fetch(`/enroll/nfc/finish?username=${encodeURIComponent(nfcUsername)}`, { method: 'POST' });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        const modes = [];
+        if (data.face_ok) modes.push(`khuôn mặt ${(data.angles_captured||[]).map(a=>LABEL[a]).join('+')||'3 góc'}`);
+        if (data.card_ok) modes.push(`thẻ NFC <b>${data.card_id}</b>`);
+        const expiryStr = data.expiry_date ? `<br>📅 Hết hạn: ${data.expiry_date.substring(0,10)}` : '';
+        _nfcSetInfo(
+          `✅ <b>Đăng ký thành công!</b><br>` +
+          `👤 ${data.username} — ${data.position || ''}<br>` +
+          `📋 Đã lưu: ${modes.join(' + ')}${expiryStr}`,
+          'ok'
+        );
+        _nfcReset(false);
+        // Mark NFC badge as done
+        document.getElementById('nfc-badge').className = 'nfc-badge done';
+        document.getElementById('nfc-badge').innerHTML = data.card_ok
+          ? `💳 Thẻ đã đăng ký: <b>${data.card_id}</b>`
+          : '💳 Không có thẻ NFC';
+      } else {
+        const missing = (data.missing_angles||[]).map(a=>LABEL[a]).join(', ');
+        _nfcSetInfo(
+          `❌ <b>Chưa đủ điều kiện:</b><br>` +
+          `🎭 Khuôn mặt: ${data.face_ok ? '✅' : `❌ (còn thiếu: ${missing})`}<br>` +
+          `💳 Thẻ NFC: ${data.card_ok ? '✅' : '❌ Chưa quét'}<br>` +
+          `→ Cần ít nhất 1 trong 2 để hoàn tất.`,
+          'err'
+        );
+        document.getElementById('nfc-finish-btn').disabled = false;
+      }
+    } catch(e) {
+      _nfcSetInfo(`❌ Lỗi: ${e}`, 'err');
+      document.getElementById('nfc-finish-btn').disabled = false;
+    }
+  }
+
+  function _nfcAbortCardSSE() {
+    if (nfcNfcES) {
+      try { nfcNfcES.abort(); } catch(e) {}
+      nfcNfcES = null;
+    }
+  }
+
+  function nfcCancel() {
+    if (nfcES)    { nfcES.close(); nfcES = null; }
+    _nfcAbortCardSSE();
+    if (nfcUsername) {
+      fetch(`/enroll/nfc/reset?username=${encodeURIComponent(nfcUsername)}`, { method: 'DELETE' }).catch(()=>{});
+    }
+    _nfcSetInfo('⏹ Đã huỷ phiên đăng ký.');
+    _nfcReset(true);
+  }
+
+  function _nfcReset(clearForm) {
+    nfcActive   = false;
+    nfcAngles   = {};
+    nfcCardId   = null;
+    _nfcAbortCardSSE();
+    if (clearForm) nfcUsername = null;
+    document.getElementById('nfc-start-btn').disabled  = false;
+    document.getElementById('nfc-finish-btn').disabled = true;
+    document.getElementById('nfc-cancel-btn').disabled = true;
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // TAB 3 — XÁC THỰC — KHUÔN MẶT 1s/lần + THẺ TỪ SONG SONG
+  // ══════════════════════════════════════════════════════════
+  let verifyES      = null;   // face SSE
+  let verifyCardES  = null;   // card SSE (AbortController)
   let verifyRunning = false;
 
   function _onTabVerify() {
@@ -435,22 +889,26 @@
     verifyRunning = true;
     document.getElementById('vr-stop').disabled = false;
     _connectVerifySSE();
+    _connectVerifyCardSSE();
   }
 
   function stopVerifySystem() {
     verifyRunning = false;
     if (verifyES) { verifyES.close(); verifyES = null; }
+    if (verifyCardES) { try { verifyCardES.abort(); } catch(e){} verifyCardES = null; }
     _vrSetPhase('stopped');
     document.getElementById('vr-stop').disabled = true;
     document.getElementById('vr-info').textContent = '⏹ Hệ thống đã dừng';
     document.getElementById('vr-info').className   = 'info-box';
+    document.getElementById('vr-card-badge').textContent = '💳 Đã dừng';
+    document.getElementById('vr-card-badge').style.borderColor = '#334155';
+    document.getElementById('vr-card-badge').style.color = '#475569';
   }
 
   function _connectVerifySSE() {
     if (!verifyRunning) return;
     if (verifyES) { verifyES.close(); verifyES = null; }
 
-    // Reset UI
     document.getElementById('vr-ph').style.display    = 'flex';
     document.getElementById('vr-frame').style.display = 'none';
     document.getElementById('vr-face-card').innerHTML = '<b>—</b>';
@@ -465,11 +923,8 @@
     if (username) url += `&username=${encodeURIComponent(username)}`;
 
     verifyES = new EventSource(url);
-
     verifyES.onmessage = function(ev) {
       const d = JSON.parse(ev.data);
-
-      // ── Lỗi nghiêm trọng ──────────────────────────────────
       if (d.error) {
         document.getElementById('vr-info').textContent = '❌ ' + d.error;
         document.getElementById('vr-info').className   = 'info-box err';
@@ -478,111 +933,171 @@
         if (verifyRunning) setTimeout(_connectVerifySSE, 3000);
         return;
       }
-
-      // ── Cập nhật frame preview ─────────────────────────────
       if (d.frame_b64) {
         document.getElementById('vr-ph').style.display    = 'none';
         document.getElementById('vr-frame').style.display = 'block';
         document.getElementById('vr-frame').src = 'data:image/jpeg;base64,' + d.frame_b64;
       }
-
-      // ── Không có mặt ─────────────────────────────────────
       if (d.phase === 'no_face') {
         _vrSetPhase('scanning');
         document.getElementById('vr-face-card').innerHTML = '<b>—</b>';
         document.getElementById('vr-face-card').className = 'angle-card';
-        document.getElementById('vr-info').textContent = '👤 Không phát hiện khuôn mặt';
-        document.getElementById('vr-info').className   = 'info-box';
         return;
       }
-
-      // ── Scanning — có mặt nhưng chưa khớp ────────────────
       if (d.phase === 'scanning') {
         _vrSetPhase('scanning');
-        // Cập nhật face crop nếu có mặt
         if (d.face_crop_b64) {
           document.getElementById('vr-face-card').className = 'angle-card';
           document.getElementById('vr-face-card').innerHTML =
             `<img src="data:image/jpeg;base64,${d.face_crop_b64}" style="width:100%;border-radius:6px"/>` +
             (d.score > 0 ? `<br><span style="color:#94a3b8;font-size:.75rem">score: ${d.score}</span>` : '');
         }
-        document.getElementById('vr-info').textContent = d.message || '🔍 Đang quét...';
-        document.getElementById('vr-info').className   = 'info-box';
         return;
       }
-
-      // ── Matched ✅ ────────────────────────────────────────
       if (d.phase === 'matched') {
         _vrSetPhase('success');
         const expiryInfo = d.expiry_date
-          ? `<br><span style="color:#fbbf24;font-size:.75rem">📅 Hết hạn: ${d.expiry_date.substring(0,10)}</span>`
+          ? `<br><span style="color:#fbbf24;font-size:.75rem">📅 ${d.expiry_date.substring(0,10)}</span>`
           : '';
-        // Hiển thị face crop thành công
         if (d.face_crop_b64) {
           document.getElementById('vr-face-card').className = 'angle-card ok';
           document.getElementById('vr-face-card').innerHTML =
             `<img src="data:image/jpeg;base64,${d.face_crop_b64}" style="width:100%;border-radius:6px"/>` +
             `<br><b style="color:#4ade80">✅ ${d.username}</b>` +
-            `<br><span style="color:#94a3b8;font-size:.75rem">score: ${d.score}</span>` +
-            expiryInfo;
+            `<br><span style="color:#94a3b8;font-size:.75rem">score: ${d.score}</span>${expiryInfo}`;
         }
         const expiryLine = d.expiry_date ? ` — Hết hạn: ${d.expiry_date.substring(0,10)}` : '';
         document.getElementById('vr-info').innerHTML =
-          `✅ <b>Xác thực thành công!</b><br>👤 ${d.username} — Score: ${d.score}${expiryLine}`;
+          `✅ <b>Xác thực khuôn mặt thành công!</b><br>👤 ${d.username} — Score: ${d.score}${expiryLine}`;
         document.getElementById('vr-info').className = 'info-box ok';
         return;
       }
     };
-
     verifyES.onerror = function() {
       if (!verifyRunning) return;
-      document.getElementById('vr-info').textContent = '❌ Mất kết nối — Đang thử lại...';
-      document.getElementById('vr-info').className   = 'info-box err';
       _vrSetPhase('error');
       verifyES.close(); verifyES = null;
       setTimeout(_connectVerifySSE, 3000);
     };
   }
 
-  // ── Helpers UI ───────────────────────────────────────────
-  const PHASE_LABEL = {
-    scanning: '🔍 Đang quét khuôn mặt...',
-    success:  '✅ Xác thực thành công',
-    stopped:  '⏹ Đã dừng',
-    error:    '❌ Lỗi kết nối',
-  };
-  const PHASE_COLOR = {
-    scanning: '#334155', success: '#166534', stopped: '#1e293b', error: '#7f1d1d',
-  };
+  // ── Card verify SSE (NFC module /api/verify/scan) ─────────────────────────
+  function _connectVerifyCardSSE() {
+    if (!verifyRunning) return;
+    if (verifyCardES) { try { verifyCardES.abort(); } catch(e){} verifyCardES = null; }
 
+    const ctrl = new AbortController();
+    verifyCardES = ctrl;
+    const cardUrl = `${NFC_MODULE_URL}/api/verify/scan`;
+
+    const badge    = document.getElementById('vr-card-badge');
+    const cardCard = document.getElementById('vr-card-card');
+    badge.textContent        = '💳 Chờ quét thẻ...';
+    badge.style.borderColor  = '#334155';
+    badge.style.color        = '#475569';
+
+    (async () => {
+      try {
+        const resp = await fetch(cardUrl, { signal: ctrl.signal });
+        if (!resp.ok || !resp.body) {
+          if (verifyRunning) setTimeout(_connectVerifyCardSSE, 5000);
+          return;
+        }
+        const reader  = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop();
+
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            let d;
+            try { d = JSON.parse(line.slice(5).trim()); } catch(e) { continue; }
+
+            if (d.event === 'keepalive' || d.event === 'waiting') continue;
+
+            if (d.event === 'card_verified') {
+              const matched = d.matched;
+              const expiryInfo = d.expiry_date
+                ? `<br><span style="color:#fbbf24;font-size:.75rem">📅 ${d.expiry_date.substring(0,10)}</span>`
+                : '';
+
+              if (matched) {
+                // ✅ Thẻ hợp lệ
+                badge.textContent       = `💳 ✅ ${d.username}`;
+                badge.style.borderColor = '#22c55e';
+                badge.style.color       = '#86efac';
+                cardCard.className      = 'angle-card ok';
+                cardCard.innerHTML      =
+                  `<b style="color:#4ade80">✅ ${d.username}</b>` +
+                  `<br><span style="color:#94a3b8;font-size:.75rem">💳 ${d.card_id}</span>` +
+                  `<br><span style="color:#94a3b8;font-size:.75rem">${d.position || ''}</span>` +
+                  expiryInfo;
+                document.getElementById('vr-info').innerHTML =
+                  `💳 <b>Xác thực thẻ thành công!</b><br>👤 ${d.username} (${d.position || 'N/A'}) — ${d.card_id}`;
+                document.getElementById('vr-info').className = 'info-box ok';
+              } else {
+                // ❌ Thẻ không hợp lệ / hết hạn / không tìm thấy
+                badge.textContent       = `💳 ❌ ${d.card_id}`;
+                badge.style.borderColor = '#ef4444';
+                badge.style.color       = '#fca5a5';
+                cardCard.className      = 'angle-card err';
+                cardCard.innerHTML      =
+                  `<b style="color:#f87171">❌ ${d.reason === 'card_not_found' ? 'Không tìm thấy thẻ' : d.reason === 'expired' ? 'Hết hạn' : 'Từ chối'}</b>` +
+                  `<br><span style="color:#94a3b8;font-size:.75rem">💳 ${d.card_id}</span>`;
+                document.getElementById('vr-info').innerHTML =
+                  `💳 ❌ ${d.message || 'Xác thực thẻ thất bại'}`;
+                document.getElementById('vr-info').className = 'info-box err';
+              }
+
+              // Reset badge sau 3s
+              setTimeout(() => {
+                if (!verifyRunning) return;
+                badge.textContent       = '💳 Chờ quét thẻ...';
+                badge.style.borderColor = '#334155';
+                badge.style.color       = '#475569';
+                cardCard.className      = 'angle-card';
+                cardCard.innerHTML      = '<b>—</b>';
+              }, 3000);
+            }
+          }
+        }
+
+        // Stream đóng bất ngờ → reconnect
+        if (verifyRunning) setTimeout(_connectVerifyCardSSE, 1000);
+
+      } catch(e) {
+        if (e.name === 'AbortError') return;
+        if (verifyRunning) setTimeout(_connectVerifyCardSSE, 5000);
+      }
+    })();
+  }
+
+  const PHASE_LABEL = { scanning:'🔍 Đang quét khuôn mặt...', success:'✅ Khuôn mặt khớp', stopped:'⏹ Đã dừng', error:'❌ Lỗi kết nối' };
+  const PHASE_COLOR = { scanning:'#334155', success:'#166534', stopped:'#1e293b', error:'#7f1d1d' };
   function _vrSetPhase(phase) {
     const el = document.getElementById('vr-phase-badge');
     el.textContent = PHASE_LABEL[phase] || phase;
     el.style.borderColor = PHASE_COLOR[phase] || '#334155';
-    el.style.color = phase === 'success' ? '#86efac'
-                   : phase === 'error'   ? '#fca5a5'
-                   : '#94a3b8';
-  }
-
-  // ── Helpers ──────────────────────────────────────────────
-  function setBadge(id, state, text) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.className = 'step-badge ' + (state === 'pending' ? '' : state);
-    el.textContent = text;
+    el.style.color = phase==='success' ? '#86efac' : phase==='error' ? '#fca5a5' : '#94a3b8';
   }
 
   // ══════════════════════════════════════════════════════════
-  // QUẢN LÝ USER
+  // TAB 4 — QUẢN LÝ USER
   // ══════════════════════════════════════════════════════════
   async function loadUsers() {
     const tbody = document.getElementById('user-tbody');
-    tbody.innerHTML = '<tr><td colspan="7" style="color:#64748b;padding:16px">⏳ Đang tải...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="color:#64748b;padding:16px">⏳ Đang tải...</td></tr>';
     try {
       const res = await fetch('/users');
       const users = await res.json();
       if (!users.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="color:#64748b;padding:16px">Chưa có người dùng nào</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="color:#64748b;padding:16px">Chưa có người dùng nào</td></tr>';
         return;
       }
       tbody.innerHTML = users.map(u => {
@@ -590,25 +1105,30 @@
         const expiryColor = u.expiry_date
           ? (new Date(u.expiry_date) < new Date() ? '#f87171' : '#86efac')
           : '#475569';
+        const cardId = u.card_id
+          ? `<span style="color:#67e8f9;font-family:monospace;font-size:.8rem">💳 ${u.card_id}</span>`
+          : '<span style="color:#475569">—</span>';
         return `
         <tr>
-          <td>${u.id}</td>
+          <td style="font-size:.75rem;color:#475569">${(u.id||'').substring(0,8)}…</td>
           <td><b>${u.username}</b></td>
           <td style="color:#94a3b8;font-size:0.82rem">${u.position || '<span style="color:#475569">—</span>'}</td>
           <td>
             <span class="face-dot" style="background:${u.has_face ? '#22c55e' : '#ef4444'}"></span>
             ${u.has_face ? '✅ Có' : '❌ Chưa'}
           </td>
+          <td>${cardId}</td>
           <td style="color:${expiryColor};font-size:0.82rem">${expiry}</td>
           <td style="color:#64748b;font-size:0.78rem">${u.created_at ? u.created_at.replace('T',' ').substring(0,19) : '—'}</td>
-          <td style="display:flex;gap:6px">
-            <button class="btn-green" style="padding:4px 10px;font-size:.8rem" onclick="openEditModal('${u.username}','${u.position||''}','${u.expiry_date||''}')">✏️ Sửa</button>
-            <button class="btn-del" onclick="deleteUser('${u.username}')">🗑 Xóa</button>
+          <td style="display:flex;gap:6px;white-space:nowrap">
+            <button class="btn-green" style="padding:4px 10px;font-size:.78rem"
+              onclick="openEditModal('${u.username}','${u.position||''}','${u.expiry_date||''}')">✏️</button>
+            <button class="btn-del" onclick="deleteUser('${u.username}')">🗑</button>
           </td>
         </tr>`;
       }).join('');
     } catch(e) {
-      tbody.innerHTML = `<tr><td colspan="7" style="color:#ef4444">Lỗi: ${e}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="color:#ef4444">Lỗi: ${e}</td></tr>`;
     }
   }
 
@@ -630,7 +1150,7 @@
     loadUsers();
   }
 
-  // ── Edit modal ───────────────────────────────────────────────
+  // ── Edit modal ────────────────────────────────────────────
   let _editUsername = null;
 
   function openEditModal(username, position, expiryDate) {
@@ -638,7 +1158,6 @@
     document.getElementById('edit-username-label').textContent = username;
     document.getElementById('edit-new-username').value = '';
     document.getElementById('edit-position').value = position || '';
-    // Set expiry date: convert ISO to YYYY-MM-DD for date input
     document.getElementById('edit-expiry').value = expiryDate ? expiryDate.substring(0,10) : '';
     document.getElementById('edit-face-file').value = '';
     document.getElementById('edit-preview').innerHTML = '';
@@ -651,7 +1170,6 @@
     _editUsername = null;
   }
 
-  // Preview ảnh trước khi upload + tự khởi động verify nếu tab verify active
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('edit-face-file').addEventListener('change', function() {
       const f = this.files[0];
@@ -663,23 +1181,19 @@
       };
       reader.readAsDataURL(f);
     });
-
-    // Tự khởi động khi trang load nếu tab verify đang active
-    if (document.getElementById('tab-verify').classList.contains('active')) {
-      _onTabVerify();
-    }
+    if (document.getElementById('tab-verify').classList.contains('active')) _onTabVerify();
   });
 
   async function submitEditUser() {
     if (!_editUsername) return;
-    const newName    = document.getElementById('edit-new-username').value.trim();
-    const newPos     = document.getElementById('edit-position').value.trim();
-    const newExpiry  = document.getElementById('edit-expiry').value.trim();
-    const fileInput  = document.getElementById('edit-face-file');
+    const newName   = document.getElementById('edit-new-username').value.trim();
+    const newPos    = document.getElementById('edit-position').value.trim();
+    const newExpiry = document.getElementById('edit-expiry').value.trim();
+    const fileInput = document.getElementById('edit-face-file');
     const file = fileInput.files[0];
 
     if (!newName && !newPos && !newExpiry && !file) {
-      document.getElementById('edit-info').textContent = '⚠️ Nhập tên mới, chức vụ mới, ngày hết hạn mới hoặc chọn ảnh';
+      document.getElementById('edit-info').textContent = '⚠️ Nhập ít nhất 1 thông tin cần thay đổi';
       return;
     }
 
@@ -698,10 +1212,15 @@
     const info = document.getElementById('edit-info');
     info.textContent = res.ok ? `✅ ${d.message}` : `❌ ${d.detail || JSON.stringify(d)}`;
     info.style.color = res.ok ? '#4ade80' : '#f87171';
+    if (res.ok) setTimeout(() => { closeEditModal(); loadUsers(); }, 800);
+  }
 
-    if (res.ok) {
-      setTimeout(() => { closeEditModal(); loadUsers(); }, 800);
-    }
+  // ── Shared helpers ────────────────────────────────────────
+  function setBadge(id, state, text) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.className = 'step-badge ' + (state === 'pending' ? '' : state);
+    el.textContent = text;
   }
 </script>
 </body>

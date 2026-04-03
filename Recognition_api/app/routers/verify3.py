@@ -30,8 +30,13 @@ from app.ws_producer import push_event_async
 
 router = APIRouter()
 
-MATCH_THRESHOLD = 0.6   # score tối thiểu để xác thực thành công
-SCAN_INTERVAL   = 1.0   # giây giữa mỗi lần quét
+MATCH_THRESHOLD   = 0.6   # score tối thiểu để xác thực thành công
+SCAN_INTERVAL     = 1.0   # giây giữa mỗi lần quét
+PUSH_COOLDOWN_SEC = 10.0  # giây chờ giữa 2 lần push socket cho cùng 1 user
+
+# Zone nhận diện: chỉ xử lý mặt có tâm nằm trong vùng 200×300 ở giữa frame
+ZONE_W = 200
+ZONE_H = 300
 
 
 def _event(data: dict) -> str:
@@ -57,16 +62,35 @@ def _get_frame_fn(src):
     return lambda: (lambda ret, f: f if ret else None)(*cap.read()), cap
 
 
+def _face_in_zone(face, frame_h: int, frame_w: int) -> bool:
+    """Kiểm tra tâm bbox của face có nằm trong zone 300×400 giữa frame không."""
+    x1, y1, x2, y2 = face.bbox[:4]
+    cx = (x1 + x2) / 2
+    cy = (y1 + y2) / 2
+    zone_x1 = (frame_w - ZONE_W) / 2
+    zone_y1 = (frame_h - ZONE_H) / 2
+    zone_x2 = zone_x1 + ZONE_W
+    zone_y2 = zone_y1 + ZONE_H
+    return zone_x1 <= cx <= zone_x2 and zone_y1 <= cy <= zone_y2
+
+
 def _detect_and_match(frame, users, model):
     """
-    Detect mặt trong frame → so sánh với tất cả users.
+    Detect mặt trong frame → chỉ xử lý mặt trong zone giữa → so sánh với tất cả users.
     Trả về (best_user, best_score, face_crop_b64) hoặc (None, 0.0, None).
     """
     faces = model.get(frame)
     if not faces:
         return None, 0.0, None
 
-    # Chọn mặt lớn nhất
+    frame_h, frame_w = frame.shape[:2]
+
+    # Lọc chỉ giữ mặt có tâm trong zone
+    faces = [f for f in faces if _face_in_zone(f, frame_h, frame_w)]
+    if not faces:
+        return None, 0.0, None
+
+    # Chọn mặt lớn nhất trong zone
     face = max(faces, key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]))
 
     # Lấy embedding
@@ -97,6 +121,8 @@ async def _verify_generator(source: str, username: Optional[str]):
     from app.face_utils import get_face_model
 
     src = _parse_source(source)
+    # Cooldown tracker: username -> timestamp lần push cuối
+    _last_push: dict[str, float] = {}
 
     # Load users từ MongoDB
     query = User.find(User.face_embedding_b64 != None)  # noqa: E711
@@ -126,13 +152,26 @@ async def _verify_generator(source: str, username: Optional[str]):
             # ── Detect + match ───────────────────────────────────────
             best_user, best_score, face_crop_b64 = _detect_and_match(frame, users, model)
 
+            # Vẽ zone lên frame để hiển thị
+            fh, fw = frame.shape[:2]
+            zx1 = int((fw - ZONE_W) / 2)
+            zy1 = int((fh - ZONE_H) / 2)
+            zx2 = zx1 + ZONE_W
+            zy2 = zy1 + ZONE_H
+            zone_color = (0, 255, 0) if best_user is not None else (0, 165, 255)
+            cv2.rectangle(frame, (zx1, zy1), (zx2, zy2), zone_color, 2)
+            cv2.putText(frame, "Dung vao day", (zx1, zy1 - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, zone_color, 1)
+
             # Không có mặt trong frame → bắn no_face, tiếp tục
             if best_user is None and best_score == 0.0:
+                _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
                 yield _event({
                     "phase":     "no_face",
                     "event":     "verify_no_face",
                     "source":    source,
                     "timestamp": datetime.now().isoformat(),
+                    "frame_b64": base64.b64encode(buf.tobytes()).decode(),
                     "message":   "Không phát hiện khuôn mặt",
                 })
                 continue
@@ -144,11 +183,15 @@ async def _verify_generator(source: str, username: Optional[str]):
             matched   = best_score >= MATCH_THRESHOLD
             ts        = datetime.now().isoformat()
 
+            import time
+            now_ts = time.monotonic()
+
             if matched:
-                # ✅ Có người + thỏa mãn → bắn, tiếp tục quét ngay
+                # ✅ Có người + thỏa mãn → luôn yield SSE, nhưng chỉ push socket nếu hết cooldown
                 event_data = {
                     "phase":         "matched",
                     "event":         "verify_matched",
+                    "type":          "face_recognition",
                     "username":      best_user.username,
                     "position":      best_user.position or "",
                     "expiry_date":   best_user.expiry_date.isoformat() if best_user.expiry_date else None,
@@ -160,13 +203,19 @@ async def _verify_generator(source: str, username: Optional[str]):
                     "message":       f"✅ Xác thực thành công: {best_user.username} ({best_score})",
                 }
                 yield _event({**event_data, "frame_b64": frame_b64})
-                asyncio.ensure_future(push_event_async(event_data))
+
+                # Push socket chỉ 1 lần mỗi PUSH_COOLDOWN_SEC giây / user
+                last = _last_push.get(best_user.username, 0.0)
+                if now_ts - last >= PUSH_COOLDOWN_SEC:
+                    _last_push[best_user.username] = now_ts
+                    asyncio.ensure_future(push_event_async(event_data))
 
             else:
-                # ❌ Có người + không thỏa mãn → bắn, tiếp tục quét ngay
+                # ❌ Có người + không thỏa mãn → yield SSE + push socket (có cooldown)
                 event_data = {
                     "phase":            "scanning",
                     "event":            "verify_unmatched",
+                    "type":             "face_recognition",
                     "username":         None,
                     "nearest":          best_user.username,
                     "nearest_position": best_user.position or "",
@@ -179,7 +228,12 @@ async def _verify_generator(source: str, username: Optional[str]):
                     "message":          f"❌ Không nhận diện được — gần nhất: {best_user.username} (score={best_score})",
                 }
                 yield _event({**event_data, "frame_b64": frame_b64})
-                asyncio.ensure_future(push_event_async(event_data))
+
+                # Push socket với cooldown riêng cho unmatched
+                last_unmatched = _last_push.get("__unmatched__", 0.0)
+                if now_ts - last_unmatched >= PUSH_COOLDOWN_SEC:
+                    _last_push["__unmatched__"] = now_ts
+                    asyncio.ensure_future(push_event_async(event_data))
 
     except asyncio.CancelledError:
         pass

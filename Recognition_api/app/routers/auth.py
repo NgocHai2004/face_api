@@ -266,6 +266,7 @@ async def list_users():
             "expiry_date": u.expiry_date.isoformat() if u.expiry_date else None,
             "has_face": u.face_embedding_b64 is not None,
             "face_image_path": u.face_image_path,
+            "card_id": u.card_id,
             "created_at": u.created_at.isoformat() if u.created_at else None,
         }
         for u in users

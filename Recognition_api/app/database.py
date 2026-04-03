@@ -31,6 +31,7 @@ class UserDocument(Document):
     # face_embedding lưu dưới dạng base64 string (thay cho LargeBinary của SQLite)
     face_embedding_b64: Optional[str] = None
     face_image_path: Optional[str] = None
+    card_id: Optional[str] = None               # NFC/RFID card UID (uppercase hex, e.g. "A66AB0AA")
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:

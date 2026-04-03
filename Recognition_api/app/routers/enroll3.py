@@ -33,6 +33,19 @@ router = APIRouter()
 
 REQUIRED_ANGLES = ["THANG", "TRAI", "PHAI"]
 
+# Zone nhận diện: chỉ xử lý mặt có tâm nằm trong vùng 200×300 ở giữa frame
+ZONE_W = 200
+ZONE_H = 300
+
+
+def _face_in_zone(face, frame_h: int, frame_w: int) -> bool:
+    x1, y1, x2, y2 = face.bbox[:4]
+    cx = (x1 + x2) / 2
+    cy = (y1 + y2) / 2
+    zone_x1 = (frame_w - ZONE_W) / 2
+    zone_y1 = (frame_h - ZONE_H) / 2
+    return zone_x1 <= cx <= zone_x1 + ZONE_W and zone_y1 <= cy <= zone_y1 + ZONE_H
+
 
 def _event(data: dict) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
@@ -111,16 +124,54 @@ async def _enroll3_generator(username: str, source: str, position: Optional[str]
             while True:
                 await asyncio.sleep(1.0)
 
+                # ── Kiểm tra user còn tồn tại trong DB ──────────────────
+                _user_check = await User.find_one(User.username == username)
+                if _user_check is None:
+                    yield _event({
+                        "event":   "user_deleted",
+                        "username": username,
+                        "done":    True,
+                        "message": f"⚠️ User '{username}' đã bị xóa. Dừng đăng ký.",
+                    })
+                    return
+
                 frame = get_frame()
                 if frame is None:
                     yield _event({"step": angle_idx+1, "done": False,
                                   "message": "⚠️ Không lấy được frame, thử lại..."})
                     continue
 
+                fh, fw = frame.shape[:2]
+
                 # Detect hướng
                 result = get_face_direction(frame)
                 direction = result["direction"]
                 annotated = result["annotated_frame"]
+
+                # Vẽ zone rectangle lên frame
+                zx1 = int((fw - ZONE_W) / 2)
+                zy1 = int((fh - ZONE_H) / 2)
+                zx2 = zx1 + ZONE_W
+                zy2 = zy1 + ZONE_H
+                # Kiểm tra mặt nằm trong zone
+                _faces_in_zone = [f for f in result.get("_faces", []) if _face_in_zone(f, fh, fw)]
+                zone_color = (0, 255, 0) if _faces_in_zone else (0, 165, 255)
+                cv2.rectangle(annotated, (zx1, zy1), (zx2, zy2), zone_color, 2)
+                cv2.putText(annotated, "Dung vao day", (zx1, zy1 - 8),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, zone_color, 1)
+
+                if not _faces_in_zone:
+                    _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 65])
+                    frame_b64 = base64.b64encode(buf.tobytes()).decode()
+                    yield _event({
+                        "step": angle_idx + 1,
+                        "total_steps": len(REQUIRED_ANGLES),
+                        "required_angle": required,
+                        "frame_b64": frame_b64,
+                        "done": False,
+                        "message": f"Bước {angle_idx+1}/3 — Hãy đứng vào giữa khung hình",
+                    })
+                    continue
 
                 # Encode preview frame
                 cv2.putText(annotated, f"Buoc {angle_idx+1}/3: Quay mat {required}",
@@ -139,6 +190,17 @@ async def _enroll3_generator(username: str, source: str, position: Optional[str]
                         "message": f"Bước {angle_idx+1}/3 — Cần: {required}, đang: {direction or 'chưa rõ'}",
                     })
                     continue
+
+                # Kiểm tra user vẫn còn trong DB (tránh push khi user đã bị xóa)
+                user_check = await User.find_one(User.username == username)
+                if user_check is None:
+                    yield _event({
+                        "event":   "user_deleted",
+                        "username": username,
+                        "done":    True,
+                        "message": f"⚠️ User '{username}' đã bị xóa. Dừng đăng ký.",
+                    })
+                    return
 
                 # Đúng hướng → trích embedding
                 embedding, face_crop = embedding_from_faces(frame, result.get("_faces", []))
@@ -167,6 +229,7 @@ async def _enroll3_generator(username: str, source: str, position: Optional[str]
 
                 angle_event = {
                     "event": "enroll3_angle",
+                    "type":  "face_recognition",
                     "step": angle_idx + 1,
                     "total_steps": len(REQUIRED_ANGLES),
                     "required_angle": required,
@@ -200,6 +263,7 @@ async def _enroll3_generator(username: str, source: str, position: Optional[str]
 
             done_event = {
                 "event": "enroll3_done",
+                "type":  "face_recognition",
                 "done": True,
                 "username": username,
                 "position": position or "",

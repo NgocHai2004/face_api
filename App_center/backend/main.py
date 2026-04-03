@@ -100,23 +100,47 @@ Nhận ACK:
 
 ### Consumer (nhận event realtime)
 ```
-ws://<IP>:8000/ws/consumer?topic=*
-ws://<IP>:8000/ws/consumer?topic=security
+ws://<IP>:8000/ws/consumer?topic=*         ← nhận tất cả events
+ws://<IP>:8000/ws/consumer?topic=security  ← chỉ nhận security events
 ```
-Nhận NormalizedEvent:
+
+**Message hệ thống khi kết nối** (bỏ qua nếu `type == "__system__"`):
+```json
+{ "type": "__system__", "status": "connected", "subscribed_topic": "security" }
+```
+
+**NormalizedEvent nhận được:**
 ```json
 {
-  "id": "uuid-v4",
-  "timestamp": "2026-01-01T00:00:00Z",
-  "source": "face_recognition_api",
-  "type": "face_recognition",
-  "topic": "security",
-  "priority": "high",
-  "payload": { "..." : "..." },
-  "metadata": { "normalized": true, "version": "1.0" }
+  "id":        "uuid-v4",
+  "timestamp": "2026-04-03T10:00:00Z",
+  "source":    "face_recognition_api",
+  "type":      "face_recognition | nfc_enroll | card_verify",
+  "topic":     "security",
+  "priority":  "high",
+  "payload":   { "event": "verify_matched | enroll_nfc_done | ...", "..." : "..." },
+  "metadata":  { "normalized": true, "version": "1.0", "received_at": "..." }
 }
 ```
-> **Lưu ý:** Message đầu tiên khi kết nối là `__system__` message, bỏ qua khi `type == "__system__"`.
+
+**Tất cả `payload.event` consumer có thể nhận:**
+
+| `payload.event` | `type` | `topic` | Ý nghĩa |
+|---|---|---|---|
+| `verify_matched` | `face_recognition` | `security` | Xác thực mặt thành công |
+| `verify_unmatched` | `face_recognition` | `security` | Mặt không khớp DB |
+| `enroll3_angle` | `face_recognition` | `security` | Chụp 1 góc (chỉ mặt) |
+| `enroll3_done` | `face_recognition` | `security` | Xong đăng ký 3 góc mặt |
+| `enroll_nfc_angle` | `nfc_enroll` | `security` | Chụp 1 góc (NFC+Face) |
+| `enroll_nfc_done` | `nfc_enroll` | `security` | Xong đăng ký NFC+Face |
+| `verify_card_matched` | `card_verify` | `security` | Xác thực thẻ thành công |
+| `verify_card_failed` | `card_verify` | `security` | Thẻ hết hạn / thẻ lạ |
+| `enroll_card_duplicate` | `card_verify` | `security` | Thẻ đã thuộc người khác |
+
+**Đổi topic sau khi kết nối:**
+```json
+{ "action": "change_topic", "topic": "security" }
+```
 
 ---
 
@@ -212,11 +236,130 @@ Nhận NormalizedEvent:
 
 ---
 
+### Đăng ký NFC + Khuôn mặt (`/enroll/nfc/stream` + `/enroll/nfc/finish`)
+
+**Mỗi góc chụp thành công** → `payload.event = "enroll_nfc_angle"` — `type = "nfc_enroll"`:
+```json
+{
+  "source": "face_recognition_api", "type": "nfc_enroll", "priority": "high",
+  "payload": {
+    "event":          "enroll_nfc_angle",
+    "step":           1,
+    "total_steps":    3,
+    "required_angle": "THANG",
+    "captured":       "THANG",
+    "username":       "nguyen_van_a",
+    "position":       "NhanVien",
+    "expiry_date":    "2027-12-31T00:00:00",
+    "source":         "0",
+    "timestamp":      "2026-04-03T10:00:00",
+    "face_image_url": "http://192.168.x.x:8000/faces/face_xxx.jpg",
+    "message":        "✅ Đã chụp góc THANG cho 'nguyen_van_a'!"
+  }
+}
+```
+
+**Hoàn thành đăng ký NFC + Face** → `payload.event = "enroll_nfc_done"` — `type = "nfc_enroll"`:
+```json
+{
+  "source": "face_recognition_api", "type": "nfc_enroll", "priority": "high",
+  "payload": {
+    "event":           "enroll_nfc_done",
+    "done":            true,
+    "username":        "nguyen_van_a",
+    "position":        "NhanVien",
+    "expiry_date":     "2027-12-31T00:00:00",
+    "face_ok":         true,
+    "card_ok":         true,
+    "angles_captured": ["THANG", "TRAI", "PHAI"],
+    "card_id":         "A66AB0AA",
+    "registered_with": "khuôn mặt 3 góc + thẻ NFC (A66AB0AA)",
+    "timestamp":       "2026-04-03T10:00:10",
+    "message":         "✅ Đăng ký thành công cho 'nguyen_van_a'!"
+  }
+}
+```
+
+---
+
+### Xác thực thẻ NFC (`/verify/card`)
+
+**Xác thực thành công** → `payload.event = "verify_card_matched"` — `type = "card_verify"`:
+```json
+{
+  "source": "face_recognition_api", "type": "card_verify", "priority": "high",
+  "payload": {
+    "event":       "verify_card_matched",
+    "card_id":     "A66AB0AA",
+    "username":    "nguyen_van_a",
+    "position":    "NhanVien",
+    "expiry_date": "2027-12-31T00:00:00",
+    "matched":     true,
+    "reason":      "ok",
+    "timestamp":   "2026-04-03T10:00:00",
+    "message":     "✅ Xác thực thẻ thành công: nguyen_van_a"
+  }
+}
+```
+
+**Thẻ hết hạn** → `payload.event = "verify_card_failed"` / `reason = "expired"`:
+```json
+{
+  "source": "face_recognition_api", "type": "card_verify", "priority": "high",
+  "payload": {
+    "event":       "verify_card_failed",
+    "card_id":     "A66AB0AA",
+    "username":    "nguyen_van_a",
+    "matched":     false,
+    "reason":      "expired",
+    "timestamp":   "2026-04-03T10:00:00",
+    "message":     "❌ Thẻ A66AB0AA (nguyen_van_a) đã hết hạn"
+  }
+}
+```
+
+**Thẻ lạ (chưa đăng ký)** → `payload.event = "verify_card_failed"` / `reason = "card_not_found"`:
+```json
+{
+  "source": "face_recognition_api", "type": "card_verify", "priority": "high",
+  "payload": {
+    "event":    "verify_card_failed",
+    "card_id":  "863842AB",
+    "username": null,
+    "matched":  false,
+    "reason":   "card_not_found",
+    "message":  "❌ Thẻ 863842AB không tìm thấy trong hệ thống"
+  }
+}
+```
+
+**Thẻ đã thuộc người khác (khi đăng ký)** → `payload.event = "enroll_card_duplicate"` — `type = "card_verify"`:
+```json
+{
+  "source": "face_recognition_api", "type": "card_verify", "priority": "high",
+  "payload": {
+    "event":                   "enroll_card_duplicate",
+    "card_id":                 "863842AB",
+    "requested_by":            "alice",
+    "current_owner":           "bob",
+    "current_owner_position":  "QuanLy",
+    "current_owner_expiry":    "2027-12-31T00:00:00",
+    "matched":                 false,
+    "reason":                  "card_already_registered",
+    "message":                 "❌ Thẻ 863842AB đã được đăng ký cho 'bob' (QuanLy)"
+  }
+}
+```
+
+---
+
 ## 🗺️ Type → Topic Mapping
 
 | type | topic |
 |------|-------|
 | `face_recognition` | `security` |
+| `nfc_enroll` | `security` |
+| `card_verify` | `security` |
 | `fingerprint` | `security` |
 | `card_reader` | `security` |
 | `custom` | `custom` |
@@ -234,13 +377,19 @@ Nhận NormalizedEvent:
 |----------------|-------|---------|---------|
 | `verify_matched` | `/verify3` | Có mặt + score ≥ 0.6 → khớp | ✅ |
 | `verify_unmatched` | `/verify3` | Có mặt + score < 0.6 → không khớp | ✅ |
-| `enroll3_angle` | `/enroll3` | Chụp thành công 1 góc | ✅ |
-| `enroll3_done` | `/enroll3` | Hoàn thành đăng ký 3 góc | ✅ |
+| `enroll3_angle` | `/enroll3` | Chụp thành công 1 góc (chỉ mặt) | ✅ |
+| `enroll3_done` | `/enroll3` | Hoàn thành đăng ký 3 góc (chỉ mặt) | ✅ |
+| `enroll_nfc_angle` | `/enroll/nfc/stream` | Chụp 1 góc (NFC+Face) | ✅ |
+| `enroll_nfc_done` | `/enroll/nfc/finish` | Hoàn thành đăng ký NFC+Face | ✅ |
+| `verify_card_matched` | `/verify/card` | Xác thực thẻ thành công | ✅ |
+| `verify_card_failed` | `/verify/card` | Thẻ hết hạn hoặc thẻ lạ | ✅ |
+| `enroll_card_duplicate` | `/enroll/nfc/card` | Thẻ đã thuộc người khác | ✅ |
 | `verify_no_face` | `/verify3` | Không phát hiện khuôn mặt | ❌ |
 
 **Phân biệt matched/unmatched nhanh:**
 - `payload.matched == true` → người được nhận diện, xem `payload.username` + `payload.position`
 - `payload.matched == false` → không nhận ra, xem `payload.nearest` (người gần nhất) + `payload.score`
+- `payload.reason` → `"ok"` | `"expired"` | `"card_not_found"` | `"card_already_registered"`
 """,
     version     = "1.1.0",
     lifespan    = lifespan,
