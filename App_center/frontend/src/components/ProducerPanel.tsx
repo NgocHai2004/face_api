@@ -72,7 +72,10 @@ export function ProducerPanel() {
   function connectWs() {
     if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close() }
     setWsStatus('connecting')
-    const wsBase = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8000'
+    const _wsEnv = import.meta.env.VITE_WS_URL
+    const wsBase = (_wsEnv && _wsEnv !== '')
+      ? _wsEnv
+      : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
     const ws = new WebSocket(`${wsBase}/ws/producer`)
     wsRef.current = ws
     ws.onopen  = () => setWsStatus('connected')
@@ -130,7 +133,10 @@ export function ProducerPanel() {
     } else {
       // REST
       try {
-        const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+        const _apiEnv = import.meta.env.VITE_API_URL
+        const apiBase = (_apiEnv && _apiEnv !== '')
+          ? _apiEnv
+          : `${window.location.protocol}//${window.location.host}`
         const res = await fetch(`${apiBase}/events/ingest`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

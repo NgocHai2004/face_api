@@ -11,9 +11,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ConnectionStatus, NormalizedEvent, WsMessage } from '../types/event'
 
-// Dùng VITE_WS_URL nếu được set (Docker/prod), fallback về localhost khi dev local
-const WS_BASE_URL  = import.meta.env.VITE_WS_URL  ?? 'ws://localhost:8000'
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+// Same-origin qua nginx proxy nếu không set VITE_WS_URL (Docker prod)
+// Dev local: set VITE_WS_URL=ws://localhost:8000 trong .env
+const _wsEnv  = import.meta.env.VITE_WS_URL
+const _apiEnv = import.meta.env.VITE_API_URL
+const WS_BASE_URL  = (_wsEnv  && _wsEnv  !== '')
+  ? _wsEnv
+  : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
+const API_BASE_URL = (_apiEnv && _apiEnv !== '')
+  ? _apiEnv
+  : `${window.location.protocol}//${window.location.host}`
 const MAX_EVENTS   = 200   // Giữ tối đa 200 events trong bộ nhớ
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000] // Backoff delays (ms)
 

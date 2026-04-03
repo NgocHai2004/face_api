@@ -29,6 +29,7 @@ import base64
 from dateutil import parser as dateutil_parser
 
 from app.database import User
+from app.enroll_state import enroll_state
 from app.face_utils import (
     extract_embedding_from_image,
     embedding_to_bytes,
@@ -242,6 +243,7 @@ async def enroll_save(
         saved_expiry = parsed_expiry
 
     del _sessions[username]
+    enroll_state.finish(username)
 
     return {
         "success": True,
@@ -294,6 +296,7 @@ async def init_user(
     position: Optional[str] = Query(None, description="Chức vụ (VD: Nhân viên, Quản lý, Bảo vệ)"),
     expiry_date: Optional[str] = Query(None, description="Ngày hết hạn (ISO 8601, VD: 2027-12-31)"),
 ):
+    enroll_state.start(username)
     parsed_expiry: Optional[datetime] = None
     if expiry_date:
         try:
@@ -352,4 +355,5 @@ async def init_user(
 def enroll_reset(username: str = Query(..., description="Tên người dùng")):
     if username in _sessions:
         del _sessions[username]
+    enroll_state.finish(username)
     return {"message": f"Đã reset session cho '{username}'"}

@@ -20,6 +20,7 @@ from typing import Optional
 from datetime import datetime
 
 from app.database import User
+from app.enroll_state import enroll_state
 from app.face_utils import (
     embedding_from_faces,
     bytes_to_embedding, verify_faces,
@@ -145,6 +146,17 @@ async def _verify_generator(source: str, username: Optional[str]):
         while True:
             await asyncio.sleep(SCAN_INTERVAL)
 
+            # ── Tạm dừng xác thực khi đang có phiên đăng ký ─────────
+            if enroll_state.is_active():
+                yield _event({
+                    "phase":     "paused",
+                    "event":     "verify_paused",
+                    "source":    source,
+                    "timestamp": datetime.now().isoformat(),
+                    "message":   "⏸ Đang đăng ký khuôn mặt — xác thực tạm dừng.",
+                })
+                continue
+
             frame = get_frame()
             if frame is None:
                 continue  # không có frame → im lặng, thử lại
@@ -213,19 +225,14 @@ async def _verify_generator(source: str, username: Optional[str]):
             else:
                 # ❌ Có người + không thỏa mãn → yield SSE + push socket (có cooldown)
                 event_data = {
-                    "phase":            "scanning",
-                    "event":            "verify_unmatched",
-                    "type":             "face_recognition",
-                    "username":         None,
-                    "nearest":          best_user.username,
-                    "nearest_position": best_user.position or "",
-                    "nearest_expiry_date": best_user.expiry_date.isoformat() if best_user.expiry_date else None,
-                    "score":            best_score,
-                    "source":           source,
-                    "timestamp":        ts,
-                    "face_crop_b64":    face_crop_b64,
-                    "matched":          False,
-                    "message":          f"❌ Không nhận diện được — gần nhất: {best_user.username} (score={best_score})",
+                    "phase":         "scanning",
+                    "event":         "verify_unmatched",
+                    "type":          "face_recognition",
+                    "username":      None,
+                    "matched":       False,
+                    "source":        source,
+                    "timestamp":     ts,
+                    "face_crop_b64": face_crop_b64,
                 }
                 yield _event({**event_data, "frame_b64": frame_b64})
 

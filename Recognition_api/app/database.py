@@ -32,6 +32,7 @@ class UserDocument(Document):
     face_embedding_b64: Optional[str] = None
     face_image_path: Optional[str] = None
     card_id: Optional[str] = None               # NFC/RFID card UID (uppercase hex, e.g. "A66AB0AA")
+    finger_id: Optional[int] = None             # Fingerprint sensor slot ID (R305, integer)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:

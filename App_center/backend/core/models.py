@@ -19,6 +19,8 @@ class EventType(str, Enum):
     CARD_VERIFY      = "card_verify"     # xác thực thẻ NFC/RFID
     FINGERPRINT      = "fingerprint"
     CARD_READER      = "card_reader"     # thẻ từ / RFID (legacy)
+    FINGER_VERIFY    = "finger_verify"   # xác thực vân tay R305
+    FINGER_ENROLL    = "finger_enroll"   # đăng ký vân tay R305
     CUSTOM           = "custom"          # fallback cho mọi type không xác định
 
 
@@ -44,6 +46,8 @@ TYPE_TO_TOPIC: dict[EventType, EventTopic] = {
     EventType.CARD_VERIFY:      EventTopic.SECURITY,
     EventType.FINGERPRINT:      EventTopic.SECURITY,
     EventType.CARD_READER:      EventTopic.SECURITY,
+    EventType.FINGER_VERIFY:    EventTopic.SECURITY,
+    EventType.FINGER_ENROLL:    EventTopic.SECURITY,
     EventType.CUSTOM:           EventTopic.CUSTOM,
 }
 

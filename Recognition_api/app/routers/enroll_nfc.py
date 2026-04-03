@@ -58,6 +58,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.database import User
+from app.enroll_state import enroll_state
 from app.face_direction import get_face_direction
 from app.face_utils import (
     embedding_to_bytes,
@@ -176,6 +177,7 @@ async def enroll_nfc_start(
         "card_id":     None,
         "finished":    False,
     }
+    enroll_state.start(username)
 
     return {
         "success":     True,
@@ -254,8 +256,9 @@ async def _do_finish(session: dict, username: str):
         saved_expiry   = expiry_date
         saved_card     = card_id
 
-    # Xóa session
+    # Xóa session và giải phóng trạng thái đăng ký
     _sessions.pop(username, None)
+    enroll_state.finish(username)
 
     modes = []
     if face_ok:
@@ -330,6 +333,7 @@ async def _face_stream_generator(
             "card_id":     None,
             "finished":    False,
         }
+        enroll_state.start(username)
         yield _sse({
             "event":    "session_created",
             "username": username,
@@ -848,5 +852,6 @@ def enroll_nfc_status(username: str = Query(..., description="Tên người dùn
 def enroll_nfc_reset(username: str = Query(..., description="Tên người dùng")):
     if username in _sessions:
         del _sessions[username]
+        enroll_state.finish(username)
         return {"success": True, "message": f"Đã reset session cho '{username}'"}
     return {"success": False, "message": f"Không có session nào cho '{username}'"}

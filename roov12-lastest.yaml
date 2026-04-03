@@ -1,0 +1,386 @@
+version: "6.3-vision-optimized"
+
+
+
+# =========================================================
+# EXECUTION POLICY
+# =========================================================
+executionPolicy:
+  askForConfirmation: false
+  retryOnFailure: true
+  maxRetries: 3
+  retryStrategy: exponential
+  retryDelayMs: 400
+  continueOnError: false
+  failFastOnCritical: true
+  speculativeExecution: true
+  idempotencyRequired: true
+  requireArtifactsBeforeRelease: true
+
+
+
+# =========================================================
+# ORCHESTRATION
+# =========================================================
+orchestration:
+  entry: ba
+  autoHandoff: true
+  parallelExecution: true
+  strictSignalValidation: true
+  deterministicRouting: true
+  signalTTLms: 120000
+
+
+
+# =========================================================
+# AUTO SCALING ENGINE
+# =========================================================
+autoScaling:
+  enabled: true
+  samplingIntervalMs: 500
+
+  metrics:
+    - queueDepth
+    - cpuLoad
+    - taskLatency
+    - roleBacklog
+    - memoryPressure
+
+  policy:
+    scaleUp:
+      cpuBelow: 75
+      queueAbove: 5
+      latencyAboveMs: 1200
+      step: 4
+
+    scaleDown:
+      cpuAbove: 85
+      queueBelow: 2
+      latencyBelowMs: 300
+      step: 2
+
+  limits:
+    minWorkers: 8
+    maxWorkers: 80
+
+  smoothing:
+    spikeProtection: true
+    movingAverageWindow: 5
+    cooldownMs: 1500
+
+
+
+# =========================================================
+# ROLE AUTO BALANCER
+# =========================================================
+roleBalancer:
+  enabled: true
+  rebalanceEveryMs: 1000
+  strategy: demand-weighted
+
+  priorities:
+    qc: 4
+    vision-parser: 4
+    fe-dev: 3
+    be-dev: 3
+    integration: 2
+    pm: 1
+    ba: 1
+    reviewer: 1
+
+  guarantees:
+    pm: 1
+    ba: 1
+    reviewer: 1
+    vision-parser: 1
+
+
+
+# =========================================================
+# ARTIFACT STORE
+# =========================================================
+artifactStore:
+  enabled: true
+  backend: memory
+  compression: true
+  ttlMinutes: 180
+  deduplicate: true
+  maxArtifactsPerRun: 600
+
+
+
+# =========================================================
+# VISION ENGINE
+# =========================================================
+visionEngine:
+
+  adaptiveBatching: true
+  maxBatch: 4
+  queueTimeoutMs: 200
+
+  preprocessing:
+    autoResize: true
+    maxWidth: 1280
+    jpegQuality: 0.75
+
+  smartSampling:
+    enabled: true
+    videoFrameStep: 5
+    diffThreshold: 0.08
+
+  outputFormat: structured-json
+
+  extract:
+    - objects
+    - text
+    - ui_state
+    - anomalies
+    - layout
+
+  limits:
+    maxImageSizeMB: 5
+    maxImagesPerTask: 6
+
+  overloadProtection:
+    dropFramesIfBusy: true
+    prioritizeLatest: true
+
+
+
+# =========================================================
+# FLOW DAG
+# =========================================================
+flow:
+
+  - from: ba
+    on: spec-ready
+    to: pm
+
+  - from: pm
+    on: plan-ready
+    to: [fe-dev, be-dev]
+
+  - from: fe-dev
+    on: fe-build-complete
+    to: integration
+
+  - from: be-dev
+    on: be-build-complete
+    to: integration
+
+
+  # ===== vision pipeline =====
+  - from: integration
+    on: integration-ready
+    to: vision-parser
+
+  - from: vision-parser
+    on: vision-parsed
+    to: qc
+
+
+  # ===== qc loop =====
+  - from: qc
+    on: bugs-found
+    to: pm
+
+  - from: qc
+    on: bug-failed
+    to: pm
+
+  - from: pm
+    on: route-fe-bug
+    to: fe-dev
+
+  - from: pm
+    on: route-be-bug
+    to: be-dev
+
+  - from: fe-dev
+    on: fe-fix-complete
+    to: qc
+
+  - from: be-dev
+    on: be-fix-complete
+    to: qc
+
+  - from: qc
+    on: bug-cleared
+    to: pm
+
+
+  # ===== release =====
+  - from: pm
+    on: all-bugs-done
+    to: reviewer
+
+  - from: reviewer
+    on: approved
+    to: be-dev
+
+  - from: be-dev
+    on: docker-ready
+    to: integration
+
+  - from: integration
+    on: deployed
+    to: qc
+
+  - from: qc
+    on: release-confirmed
+    to: deliver
+
+  - from: reviewer
+    on: rejected
+    to: pm
+
+
+
+# =========================================================
+# BOTTLENECK DETECTOR
+# =========================================================
+bottleneckDetection:
+  enabled: true
+  detect:
+    - roleStarvation
+    - queueCongestion
+    - longTasks
+    - retryStorm
+    - gpuContention
+
+  autoMitigation:
+    roleStarvation: rebalance-workers
+    queueCongestion: increase-workers
+    longTasks: isolate-worker
+    retryStorm: throttle-retries
+    gpuContention: limit-vision-workers
+
+
+
+# =========================================================
+# WORKER POLICY
+# =========================================================
+workerPolicy:
+  maxConcurrentTasksPerWorker: 2
+  isolateLongTasks: true
+  longTaskThresholdSec: 20
+  recycleAfterTasks: 40
+
+workerOverrides:
+
+  vision-parser:
+    maxConcurrentTasks: 1
+    isolate: true
+    gpuPreferred: true
+
+  qc:
+    maxConcurrentTasks: 2
+
+
+
+# =========================================================
+# LOOP CONTROL
+# =========================================================
+loopControl:
+  maxCycles: 120
+  detectInfiniteLoop: true
+  stuckTimeoutSec: 90
+  forceBreakIfStuck: true
+  autoDumpStateOnLoop: true
+
+
+
+# =========================================================
+# SAFETY
+# =========================================================
+safety:
+  preventRoleOverride: true
+  forbidContractMutation: true
+  forbidSpecMutation: true
+  blockUnauthorizedSignals: true
+  requireSignalSignature: true
+  rejectUnknownRoles: true
+  maxSignalChainDepth: 40
+
+
+
+# =========================================================
+# LOAD BALANCER
+# =========================================================
+loadBalancer:
+  strategy: predictive-least-load
+  rebalanceIntervalMs: 500
+  preemptLongTasks: true
+  maxTaskTimeSec: 45
+
+
+
+# =========================================================
+# MODES
+# =========================================================
+customModes:
+
+- slug: ba
+  name: BA
+  roleDefinition: Business Analyst
+  groups: [read]
+  signals:
+    emits: [spec-ready]
+
+- slug: pm
+  name: PM
+  roleDefinition: Technical Project Manager
+  groups: [read]
+  signals:
+    emits: [plan-ready, route-fe-bug, route-be-bug, all-bugs-done]
+
+- slug: fe-dev
+  name: FE DEV
+  roleDefinition: Frontend Engineer
+  groups: [read, edit]
+  signals:
+    emits: [fe-build-complete, fe-fix-complete]
+
+- slug: be-dev
+  name: BE DEV
+  roleDefinition: Backend Engineer
+  groups: [read, edit, command]
+  signals:
+    emits: [be-build-complete, be-fix-complete, docker-ready]
+
+- slug: integration
+  name: INTEGRATION
+  roleDefinition: Integrator
+  groups: [read, command]
+  signals:
+    emits: [integration-ready, deployed]
+
+- slug: vision-parser
+  name: VISION PARSER
+  roleDefinition: Image Analysis Worker
+  groups: [read, command]
+  signals:
+    emits: [vision-parsed]
+
+- slug: qc
+  name: QC
+  roleDefinition: Quality Controller
+  groups: [read, browser, command]
+  tools:
+    - vision-parser
+  signals:
+    emits: [bugs-found, bug-cleared, bug-failed, release-confirmed]
+
+- slug: reviewer
+  name: REVIEWER
+  roleDefinition: Final Authority
+  groups: [read]
+  signals:
+    emits: [approved, rejected]
+
+- slug: deliver
+  name: DELIVER
+  roleDefinition: Release Manager
+  groups: [read]
+  signals:
+    emits: []

@@ -20,6 +20,7 @@ from datetime import datetime
 from dateutil import parser as dateutil_parser
 
 from app.database import User
+from app.enroll_state import enroll_state
 from app.face_utils import (
     embedding_from_faces,
     embedding_to_bytes,
@@ -71,6 +72,7 @@ def _get_frame_fn(src):
 
 
 async def _enroll3_generator(username: str, source: str, position: Optional[str] = None, expiry_date: Optional[datetime] = None):
+    enroll_state.start(username)
     # ── Kiểm tra / tạo user ─────────────────────────────────
     user = await User.find_one(User.username == username)
     if user:
@@ -286,6 +288,7 @@ async def _enroll3_generator(username: str, source: str, position: Optional[str]
     except Exception as e:
         yield _event({"error": str(e)})
     finally:
+        enroll_state.finish(username)
         if cap is not None:
             cap.release()
 

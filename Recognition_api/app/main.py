@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
 import cv2
@@ -14,6 +15,8 @@ from app.routers import verify3 as verify3_router
 from app.routers import enroll_manual as enroll_manual_router
 from app.routers import enroll_nfc as enroll_nfc_router
 from app.routers import verify_card as verify_card_router
+from app.routers import enroll_finger as enroll_finger_router
+from app.routers import verify_finger as verify_finger_router
 from app.config import settings
 
 
@@ -106,6 +109,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS — cho phép mọi origin (frontend, tablet, mobile, v.v.)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Mount static files
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -117,6 +129,8 @@ app.include_router(verify3_router.router, tags=["Verify 3 Angles"])
 app.include_router(enroll_manual_router.router, prefix="/enroll", tags=["Enroll Manual"])
 app.include_router(enroll_nfc_router.router, tags=["Enroll NFC + Face"])
 app.include_router(verify_card_router.router, tags=["Verify Card"])
+app.include_router(enroll_finger_router.router, tags=["Enroll Fingerprint"])
+app.include_router(verify_finger_router.router, tags=["Verify Finger"])
 
 
 @app.get("/", tags=["UI"])

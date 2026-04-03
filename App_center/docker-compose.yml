@@ -17,13 +17,14 @@ services:
     build:
       context: ./frontend
       args:
-        # WebSocket URL trỏ về backend qua nginx proxy (same-origin)
-        # Khi dùng nginx proxy, WS đi qua /ws/ → không cần đổi host
-        VITE_WS_URL: ws://localhost:8000
-        VITE_API_URL: http://localhost:8000
+        # Để trống → useEventHub.ts dùng window.location.host (same-origin qua nginx proxy)
+        VITE_WS_URL: ""
+        VITE_API_URL: ""
     container_name: app_center_frontend
     restart: unless-stopped
     ports:
       - "80:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # 172.17.0.1 → backend host-network
     depends_on:
       - backend
