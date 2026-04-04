@@ -1,7 +1,7 @@
 """
 app/routers/enroll_nfc.py
 
-Đăng ký kết hợp NFC thẻ từ + khuôn mặt 3 góc (tất cả tự động).
+Đăng ký kết hợp NFC thẻ từ + khuôn mặt 3 góc + vân tay (tất cả tự động).
 
 ────────────────────────────────────────────────────────────────────
 FLOW TỔNG QUAN
@@ -20,11 +20,17 @@ FLOW TỔNG QUAN
         ?username=alice&card_id=A66AB0AA
     → NFC reader module gọi khi quét được thẻ. Lưu card_id vào session.
 
+3b. POST /enroll/nfc/finger
+        ?username=alice&finger_id=5
+    → Finger reader module gọi khi quét được vân tay. Lưu finger_id vào
+      session và ghi ngay vào MongoDB (song song với NFC).
+
 4.  POST /enroll/nfc/finish?username=alice
     → Kết thúc đăng ký. Điều kiện thành công:
-        • Đủ 3 góc mặt  (face_ok = True)   — hoặc —
-        • Có card_id    (card_ok = True)    — hoặc —
-        • Cả hai
+        • Đủ 3 góc mặt   (face_ok = True)   — hoặc —
+        • Có card_id     (card_ok = True)    — hoặc —
+        • Có finger_id   (finger_ok = True)  — hoặc —
+        • Bất kỳ tổ hợp nào
       Nếu KHÔNG có gì → 422 "Chưa đủ điều kiện".
       Tính avg embedding (nếu có mặt), lưu MongoDB.
 
@@ -37,6 +43,7 @@ _sessions[username] = {
     "expiry_date": datetime | None,
     "angles":      { "THANG": {"embedding": ndarray, "face_crop_b64": str|None}, ... },
     "card_id":     str | None,
+    "finger_id":   int | None,
     "finished":    bool,
 }
 ────────────────────────────────────────────────────────────────────
@@ -122,14 +129,15 @@ def _get_frame_fn(src):
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post(
     "/start",
-    summary="🚀 Khởi tạo session đăng ký NFC + Khuôn mặt",
+    summary="🚀 Khởi tạo session đăng ký NFC + Khuôn mặt + Vân tay",
     description=(
         "Bước đầu tiên: tạo session đăng ký cho user.\n\n"
         "Sau khi gọi API này:\n"
         "1. Kết nối SSE: `GET /enroll/nfc/stream?username=alice&source=0`\n"
         "2. NFC reader tự động gọi `POST /enroll/nfc/card` khi quét được thẻ\n"
-        "3. Nhấn nút kết thúc: `POST /enroll/nfc/finish?username=alice`\n\n"
-        "**Điều kiện kết thúc thành công:** đủ 3 góc mặt HOẶC có thẻ từ (hoặc cả hai)."
+        "3. Finger reader tự động gọi `POST /enroll/nfc/finger` khi quét được vân tay\n"
+        "4. Nhấn nút kết thúc: `POST /enroll/nfc/finish?username=alice`\n\n"
+        "**Điều kiện kết thúc thành công:** đủ 3 góc mặt HOẶC có thẻ NFC HOẶC có vân tay (hoặc tổ hợp bất kỳ)."
     ),
 )
 async def enroll_nfc_start(
@@ -175,6 +183,7 @@ async def enroll_nfc_start(
         "expiry_date": parsed_expiry,
         "angles":      {},
         "card_id":     None,
+        "finger_id":   None,
         "finished":    False,
     }
     enroll_state.start(username)
@@ -191,9 +200,10 @@ async def enroll_nfc_start(
             else f"ℹ️ User '{username}' đã tồn tại. Session mới đã khởi tạo."
         ),
         "next_steps": {
-            "sse_stream":   f"GET /enroll/nfc/stream?username={username}&source=0",
-            "submit_card":  f"POST /enroll/nfc/card?username={username}&card_id=<UID>",
-            "finish":       f"POST /enroll/nfc/finish?username={username}",
+            "sse_stream":    f"GET /enroll/nfc/stream?username={username}&source=0",
+            "submit_card":   f"POST /enroll/nfc/card?username={username}&card_id=<UID>",
+            "submit_finger": f"POST /enroll/nfc/finger?username={username}&finger_id=<SLOT>",
+            "finish":        f"POST /enroll/nfc/finish?username={username}",
         },
     }
 
@@ -205,11 +215,23 @@ async def _do_finish(session: dict, username: str):
     """
     Async generator: thực hiện lưu DB từ session và yield SSE event enroll_done.
     Dùng cho cả auto_finish trong stream và endpoint /finish.
+    Hỗ trợ: khuôn mặt 3 góc, thẻ NFC, vân tay (finger_id) — song song.
     """
     angles_collected = session["angles"]
     card_id          = session.get("card_id")
+    finger_id        = session.get("finger_id")
     face_ok          = len(angles_collected) == len(REQUIRED_ANGLES)
     card_ok          = bool(card_id)
+    finger_ok        = finger_id is not None
+
+    if not (face_ok or card_ok or finger_ok):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Chưa đủ điều kiện đăng ký cho '{username}'. "
+                "Cần ít nhất 1 trong 3: đủ 3 góc mặt HOẶC quét thẻ NFC HOẶC quét vân tay."
+            ),
+        )
 
     session["finished"] = True
 
@@ -232,6 +254,8 @@ async def _do_finish(session: dict, username: str):
             user.face_image_path = f"./face_images/{username}_THANG.jpg"
         if card_id is not None:
             user.card_id = card_id
+        if finger_id is not None:
+            user.finger_id = finger_id
         if position is not None:
             user.position = position
         if expiry_date is not None:
@@ -240,6 +264,7 @@ async def _do_finish(session: dict, username: str):
         saved_position = user.position
         saved_expiry   = user.expiry_date
         saved_card     = user.card_id
+        saved_finger   = user.finger_id
     else:
         user = User(
             username=username,
@@ -251,10 +276,13 @@ async def _do_finish(session: dict, username: str):
         )
         if avg_embedding is not None:
             user.face_embedding = avg_embedding
+        if finger_id is not None:
+            user.finger_id = finger_id
         await user.insert()
         saved_position = position
         saved_expiry   = expiry_date
         saved_card     = card_id
+        saved_finger   = finger_id
 
     # Xóa session và giải phóng trạng thái đăng ký
     _sessions.pop(username, None)
@@ -265,6 +293,8 @@ async def _do_finish(session: dict, username: str):
         modes.append("khuôn mặt 3 góc")
     if card_ok:
         modes.append(f"thẻ NFC ({saved_card})")
+    if finger_ok:
+        modes.append(f"vân tay (slot {finger_id})")
 
     done_event = {
         "event":           "enroll_nfc_done",
@@ -275,6 +305,8 @@ async def _do_finish(session: dict, username: str):
         "expiry_date":     saved_expiry.isoformat() if saved_expiry else None,
         "face_ok":         face_ok,
         "card_ok":         card_ok,
+        "finger_ok":       finger_ok,
+        "finger_id":       saved_finger,
         "angles_captured": list(angles_collected.keys()) if face_ok else [],
         "card_id":         saved_card,
         "registered_with": " + ".join(modes),
@@ -331,6 +363,7 @@ async def _face_stream_generator(
             "expiry_date": parsed_expiry,
             "angles":      {},
             "card_id":     None,
+            "finger_id":   None,
             "finished":    False,
         }
         enroll_state.start(username)
@@ -680,6 +713,7 @@ async def enroll_nfc_card(
             "expiry_date": None,
             "angles":      {},
             "card_id":     None,
+            "finger_id":   None,
             "finished":    False,
         }
 
@@ -717,6 +751,68 @@ async def enroll_nfc_card(
         "old_card": old_card,
         "message":  f"✅ Đã lưu card_id '{card_id_upper}' cho user '{username}'.",
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /enroll/nfc/finger  — Finger reader module gọi khi quét được vân tay
+# ─────────────────────────────────────────────────────────────────────────────
+@router.post(
+    "/finger",
+    summary="🖐 Finger reader gửi finger_id vào session đăng ký NFC",
+    description=(
+        "Finger reader module gọi endpoint này sau khi enroll vân tay thành công.\n\n"
+        "finger_id sẽ được lưu vào session đăng ký của username và ghi ngay vào MongoDB.\n\n"
+        "Hoạt động song song với NFC card — không cần chờ /finish.\n\n"
+        "Nếu finger_id đã thuộc user khác → 409 Conflict."
+    ),
+)
+async def enroll_nfc_finger(
+    username:  str = Query(..., description="Tên người dùng đang đăng ký"),
+    finger_id: int = Query(..., ge=0, le=161, description="Slot ID vân tay R305 (0–161)"),
+):
+    # 1. Kiểm tra conflict: finger_id đã thuộc user khác?
+    conflict = await User.find_one(User.finger_id == finger_id)
+    if conflict is not None and conflict.username != username:
+        event_data = {
+            "event":         "enroll_finger_duplicate",
+            "type":          "finger_reader",
+            "finger_id":     finger_id,
+            "requested_by":  username,
+            "current_owner": conflict.username,
+            "matched":       False,
+            "reason":        "finger_already_registered",
+            "timestamp":     datetime.now().isoformat(),
+            "message":       f"❌ finger_id {finger_id} đã được đăng ký bởi '{conflict.username}'",
+        }
+        asyncio.ensure_future(push_event_async(event_data, event_type="finger_reader"))
+        return JSONResponse(status_code=409, content={"success": False, **event_data})
+
+    # 2. Ghi vào session (nếu có)
+    session = _sessions.get(username)
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Không có session đăng ký cho '{username}'. Gọi /enroll/nfc/start hoặc /enroll/nfc/stream trước.",
+        )
+    session["finger_id"] = finger_id
+
+    # 3. Lưu finger_id vào MongoDB ngay lập tức
+    user = await User.find_one(User.username == username)
+    if user:
+        user.finger_id = finger_id
+        await user.save()
+
+    # 4. Push event
+    finger_event = {
+        "event":     "enroll_nfc_finger",
+        "type":      "finger_reader",
+        "finger_id": finger_id,
+        "username":  username,
+        "timestamp": datetime.now().isoformat(),
+        "message":   f"🖐 Vân tay slot {finger_id} đã được quét cho '{username}'.",
+    }
+    asyncio.ensure_future(push_event_async(finger_event, event_type="finger_reader"))
+    return JSONResponse(status_code=200, content={"success": True, **finger_event})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -759,11 +855,13 @@ async def enroll_nfc_finish(
 
     angles_collected = session["angles"]
     card_id          = session.get("card_id")
+    finger_id        = session.get("finger_id")
     face_ok          = len(angles_collected) == len(REQUIRED_ANGLES)
     card_ok          = bool(card_id)
+    finger_ok        = finger_id is not None
 
     # ── Kiểm tra điều kiện ───────────────────────────────────────────────────
-    if not face_ok and not card_ok:
+    if not face_ok and not card_ok and not finger_ok:
         missing_angles = [a for a in REQUIRED_ANGLES if a not in angles_collected]
         return JSONResponse(
             status_code=422,
@@ -772,16 +870,19 @@ async def enroll_nfc_finish(
                 "satisfied":       False,
                 "face_ok":         face_ok,
                 "card_ok":         card_ok,
+                "finger_ok":       finger_ok,
                 "angles_captured": list(angles_collected.keys()),
                 "missing_angles":  missing_angles,
                 "card_id":         None,
+                "finger_id":       None,
                 "username":        username,
                 "message": (
                     f"❌ Chưa đủ điều kiện đăng ký cho '{username}'.\n"
                     f"  • Khuôn mặt: {len(angles_collected)}/3 góc "
                     f"(còn thiếu: {', '.join(ANGLE_LABELS[a] for a in missing_angles)})\n"
                     f"  • Thẻ NFC: chưa quét\n"
-                    f"Cần ít nhất 1 trong 2: đủ 3 góc mặt HOẶC quét thẻ NFC."
+                    f"  • Vân tay: chưa quét\n"
+                    f"Cần ít nhất 1 trong 3: đủ 3 góc mặt HOẶC quét thẻ NFC HOẶC quét vân tay."
                 ),
             },
         )
@@ -803,8 +904,10 @@ async def enroll_nfc_finish(
         "expiry_date":     result_event.get("expiry_date"),
         "face_ok":         result_event.get("face_ok", face_ok),
         "card_ok":         result_event.get("card_ok", card_ok),
+        "finger_ok":       result_event.get("finger_ok", finger_ok),
         "angles_captured": result_event.get("angles_captured", []),
         "card_id":         result_event.get("card_id"),
+        "finger_id":       result_event.get("finger_id"),
         "registered_with": result_event.get("registered_with", ""),
         "message":         result_event.get("message", f"✅ Đã đăng ký '{username}'."),
     }
@@ -837,8 +940,10 @@ def enroll_nfc_status(username: str = Query(..., description="Tên người dùn
         "face_ok":         len(missing) == 0,
         "card_id":         session.get("card_id"),
         "card_ok":         bool(session.get("card_id")),
+        "finger_id":       session.get("finger_id"),
+        "finger_ok":       session.get("finger_id") is not None,
         "finished":        session.get("finished", False),
-        "ready_to_finish": len(missing) == 0 or bool(session.get("card_id")),
+        "ready_to_finish": len(missing) == 0 or bool(session.get("card_id")) or session.get("finger_id") is not None,
     }
 
 

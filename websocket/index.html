@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebSocket Event Viewer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d0d0d;
+      color: #e0e0e0;
+      font-family: monospace;
+      font-size: 13px;
+      padding: 12px;
+    }
+
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    #controls input {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: #e0e0e0;
+      padding: 5px 8px;
+      font-family: monospace;
+      font-size: 13px;
+      border-radius: 3px;
+    }
+
+    #url-input { width: 280px; }
+    #topic-input { width: 100px; }
+
+    button {
+      background: #222;
+      border: 1px solid #444;
+      color: #e0e0e0;
+      padding: 5px 12px;
+      font-family: monospace;
+      font-size: 13px;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    button:hover { background: #333; }
+    button:disabled { opacity: 0.4; cursor: default; }
+
+    #status-bar {
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 3px;
+      padding: 5px 10px;
+      margin-bottom: 10px;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+
+    #status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #555;
+      flex-shrink: 0;
+    }
+    #status-dot.connected { background: #4caf50; }
+    #status-dot.connecting { background: #ff9800; }
+    #status-dot.disconnected { background: #f44336; }
+
+    #status-text { color: #aaa; }
+    #event-count { color: #aaa; margin-left: auto; }
+
+    #log {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .event-block { }
+
+    .event-ts {
+      color: #555;
+      font-size: 11px;
+      margin-bottom: 2px;
+    }
+
+    pre {
+      background: #111;
+      border: 1px solid #222;
+      border-radius: 3px;
+      padding: 8px 10px;
+      color: #4fc3f7;
+      white-space: pre-wrap;
+      word-break: break-all;
+      margin: 0;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+
+<div id="controls">
+  <input id="url-input" type="text" value="ws://localhost:8000/ws/consumer" placeholder="Hub URL" />
+  <input id="topic-input" type="text" value="*" placeholder="Topic" />
+  <button id="btn-connect">Connect</button>
+  <button id="btn-disconnect" disabled>Disconnect</button>
+  <button id="btn-clear">Clear</button>
+</div>
+
+<div id="status-bar">
+  <div id="status-dot"></div>
+  <span id="status-text">Disconnected</span>
+  <span id="event-count">0 events</span>
+</div>
+
+<div id="log"></div>
+
+<script>
+  const urlInput     = document.getElementById('url-input');
+  const topicInput   = document.getElementById('topic-input');
+  const btnConnect   = document.getElementById('btn-connect');
+  const btnDisconnect= document.getElementById('btn-disconnect');
+  const btnClear     = document.getElementById('btn-clear');
+  const statusDot    = document.getElementById('status-dot');
+  const statusText   = document.getElementById('status-text');
+  const eventCountEl = document.getElementById('event-count');
+  const logEl        = document.getElementById('log');
+
+  const MAX_EVENTS = 50;
+
+  let ws = null;
+  let reconnectTimer = null;
+  let eventCount = 0;
+  let manualDisconnect = false;
+
+  function setStatus(state, text) {
+    statusDot.className = state;
+    statusText.textContent = text;
+  }
+
+  function updateCount() {
+    eventCountEl.textContent = eventCount + ' event' + (eventCount !== 1 ? 's' : '');
+  }
+
+  function connect() {
+    manualDisconnect = false;
+    const url = urlInput.value.trim();
+    const topic = topicInput.value.trim() || '*';
+
+    setStatus('connecting', 'Connecting…');
+    btnConnect.disabled = true;
+    btnDisconnect.disabled = false;
+
+    ws = new WebSocket(url);
+
+    ws.onopen = () => {
+      setStatus('connected', 'Connected → ' + url);
+      // Subscribe to topic
+      ws.send(JSON.stringify({ type: 'subscribe', topic }));
+    };
+
+    ws.onmessage = (e) => {
+      let data;
+      try { data = JSON.parse(e.data); } catch { return; }
+
+      // Skip system messages
+      if (data && data.type === '__system__') return;
+
+      appendEvent(data);
+    };
+
+    ws.onclose = () => {
+      setStatus('disconnected', 'Disconnected');
+      btnConnect.disabled = false;
+      btnDisconnect.disabled = true;
+      ws = null;
+
+      if (!manualDisconnect) {
+        setStatus('connecting', 'Reconnecting in 3s…');
+        reconnectTimer = setTimeout(connect, 3000);
+      }
+    };
+
+    ws.onerror = () => {
+      ws.close();
+    };
+  }
+
+  function disconnect() {
+    manualDisconnect = true;
+    clearTimeout(reconnectTimer);
+    if (ws) ws.close();
+    btnConnect.disabled = false;
+    btnDisconnect.disabled = true;
+    setStatus('disconnected', 'Disconnected');
+  }
+
+  function appendEvent(data) {
+    eventCount++;
+    updateCount();
+
+    // Trim to max 50
+    while (logEl.children.length >= MAX_EVENTS) {
+      logEl.removeChild(logEl.lastChild);
+    }
+
+    const now = new Date();
+    const ts = now.toLocaleTimeString('en-GB', { hour12: false }) +
+               '.' + String(now.getMilliseconds()).padStart(3, '0');
+
+    const block = document.createElement('div');
+    block.className = 'event-block';
+
+    const tsEl = document.createElement('div');
+    tsEl.className = 'event-ts';
+    tsEl.textContent = ts;
+
+    const pre = document.createElement('pre');
+    pre.textContent = JSON.stringify(data, null, 2);
+
+    block.appendChild(tsEl);
+    block.appendChild(pre);
+
+    // Prepend (newest on top)
+    logEl.insertBefore(block, logEl.firstChild);
+  }
+
+  btnConnect.addEventListener('click', connect);
+  btnDisconnect.addEventListener('click', disconnect);
+  btnClear.addEventListener('click', () => {
+    logEl.innerHTML = '';
+    eventCount = 0;
+    updateCount();
+  });
+</script>
+</body>
+</html>

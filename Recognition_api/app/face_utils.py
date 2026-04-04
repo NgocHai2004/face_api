@@ -86,9 +86,16 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b))
 
 
-def verify_faces(stored_embedding: np.ndarray, query_embedding: np.ndarray) -> tuple[bool, float]:
+def verify_faces(stored_embedding: np.ndarray, query_embedding: np.ndarray, label: str = "") -> tuple[bool, float]:
     score = cosine_similarity(stored_embedding, query_embedding)
-    return score >= settings.FACE_THRESHOLD, score
+    matched = score >= settings.FACE_THRESHOLD
+    tag = f"user={label}" if label else "(no label)"
+    print(
+        f"[verify_faces] {tag} score={score:.4f} threshold={settings.FACE_THRESHOLD:.2f}"
+        f" → {'MATCH ✅' if matched else 'NO_MATCH ❌'}",
+        flush=True,
+    )
+    return matched, score
 
 
 def save_face_image(username: str, image: np.ndarray) -> str:

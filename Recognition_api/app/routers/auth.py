@@ -267,6 +267,7 @@ async def list_users():
             "has_face": u.face_embedding_b64 is not None,
             "face_image_path": u.face_image_path,
             "card_id": u.card_id,
+            "finger_id": u.finger_id,
             "created_at": u.created_at.isoformat() if u.created_at else None,
         }
         for u in users
@@ -412,6 +413,16 @@ async def delete_user(username: str):
     user = await User.find_one(User.username == username)
     if not user:
         raise HTTPException(status_code=404, detail=f"User '{username}' không tồn tại")
+    # Xóa vân tay trên sensor R305 (fire-and-forget, bỏ qua lỗi kết nối)
+    if user.finger_id is not None:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5) as client:
+                await client.delete(
+                    f"{settings.FINGER_READER_URL}/api/admin/fingers/{user.finger_id}"
+                )
+        except Exception:
+            pass
     for path in glob.glob(os.path.join(settings.FACE_IMAGES_DIR, f"{username}*")):
         try:
             os.remove(path)
@@ -445,6 +456,21 @@ async def delete_user(username: str):
 async def delete_all_users():
     users = await User.find_all().to_list()
     count = len(users)
+    # Xóa vân tay trên sensor R305 cho tất cả user có finger_id
+    finger_ids = [u.finger_id for u in users if u.finger_id is not None]
+    if finger_ids:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5) as client:
+                for fid in finger_ids:
+                    try:
+                        await client.delete(
+                            f"{settings.FINGER_READER_URL}/api/admin/fingers/{fid}"
+                        )
+                    except Exception:
+                        pass
+        except Exception:
+            pass
     await User.find_all().delete()
     for path in glob.glob(os.path.join(settings.FACE_IMAGES_DIR, "*.jpg")):
         try:

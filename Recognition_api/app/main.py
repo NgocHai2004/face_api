@@ -4,7 +4,6 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
-import cv2
 import platform
 
 from app.database import init_db
@@ -17,6 +16,7 @@ from app.routers import enroll_nfc as enroll_nfc_router
 from app.routers import verify_card as verify_card_router
 from app.routers import enroll_finger as enroll_finger_router
 from app.routers import verify_finger as verify_finger_router
+from app.routers import enroll_finger_scan as enroll_finger_scan_router
 from app.config import settings
 
 
@@ -103,7 +103,18 @@ app = FastAPI(
         "> **`card_id`**: NFC/RFID UID dạng hex in hoa (VD: `A66AB0AA`). Gán qua `/enroll/nfc/card` hoặc `/enroll/nfc/finish`.\n\n"
         "### 📋 Tiện ích đăng ký thủ công\n"
         "- `GET /enroll/status?username=alice`   – Xem góc đã chụp\n"
-        "- `DELETE /enroll/reset?username=alice` – Xóa session\n"
+        "- `DELETE /enroll/reset?username=alice` – Xóa session\n\n"
+        "---\n\n"
+        "### 🖐 Đăng ký vân tay R305 — SSE (qua finger_reader)\n"
+        "```\n"
+        "GET /enroll/finger/scan?username=alice&person_name=Alice&timeout=60\n"
+        "```\n"
+        "> Proxy SSE stream từ finger_reader service (mặc định `http://localhost:8082`).  \n"
+        "> SSE events: `waiting` → `finger_placed` → `second_scan_required` → `enrolled` → `registered`\n\n"
+        "Gán finger_id thủ công (không cần quét):\n"
+        "```\n"
+        "POST /enroll/finger/id?username=alice&finger_id=3\n"
+        "```\n"
     ),
     version="3.0.0",
     lifespan=lifespan,
@@ -131,6 +142,7 @@ app.include_router(enroll_nfc_router.router, tags=["Enroll NFC + Face"])
 app.include_router(verify_card_router.router, tags=["Verify Card"])
 app.include_router(enroll_finger_router.router, tags=["Enroll Fingerprint"])
 app.include_router(verify_finger_router.router, tags=["Verify Finger"])
+app.include_router(enroll_finger_scan_router.router, tags=["Enroll Fingerprint"])
 
 
 @app.get("/", tags=["UI"])
@@ -156,21 +168,24 @@ def health():
 
 @app.get("/api/hardware/status", tags=["Hardware"])
 def hardware_status():
-    """Trả về trạng thái phần cứng: camera cục bộ, RTSP, hệ thống."""
-    cameras = []
-    for idx in range(3):
-        cap = cv2.VideoCapture(idx, cv2.CAP_V4L2)
-        if not cap.isOpened():
-            cap = cv2.VideoCapture(idx)
-        if cap.isOpened():
-            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            cameras.append({"index": idx, "resolution": f"{w}x{h}", "available": True})
-            cap.release()
-        else:
-            cap.release()
+    """Trả về trạng thái phần cứng: RTSP streams và hệ thống."""
+    import urllib.request
 
     rtsp_streams = settings.get_rtsp_streams()
+
+    # Check each configured stream via HTTP snapshot (avoids opening local camera indexes
+    # which spams OpenCV V4L2 WARN on Pi 5 CSI camera pipelines)
+    cameras = []
+    for url in rtsp_streams:
+        snapshot_url = url.replace("/stream", "/snapshot")
+        available = False
+        try:
+            with urllib.request.urlopen(snapshot_url, timeout=1) as resp:
+                available = resp.status == 200
+        except Exception:
+            pass
+        cameras.append({"url": url, "available": available})
+
     return {
         "status": "ok",
         "platform": platform.machine(),

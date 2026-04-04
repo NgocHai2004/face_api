@@ -44,7 +44,6 @@ ssl/
 # ── ML model cache ────────────────────────────────────────────
 *.onnx
 models/
-~/.insightface/
 
 # ── Node / Frontend ───────────────────────────────────────────
 node_modules/
@@ -84,6 +83,7 @@ htmlcov/
 
 # ── Misc artefacts ────────────────────────────────────────────
 patch_onnx.py
-=4.0.0
-module-rfid-nfc-13-56mhz-pn532/
-finger_render/
+gradio_app.py
+
+# ── NFC module – dữ liệu thẻ (PII) ───────────────────────────
+module-rfid-nfc-13-56mhz-pn532/data/cards.json

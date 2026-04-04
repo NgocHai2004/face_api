@@ -36,9 +36,12 @@ class FaceVerifyResponse(BaseModel):
 
 # ── User info ─────────────────────────────────────────────────
 class UserInfo(BaseModel):
+    id: Optional[str] = None
     username: str
     position: Optional[str] = None
     expiry_date: Optional[datetime] = None
     has_face: bool
     face_image_path: Optional[str] = None
+    card_id: Optional[str] = None
+    finger_id: Optional[int] = None
     created_at: Optional[str] = None

@@ -5,7 +5,7 @@ SSE endpoint xác thực khuôn mặt liên tục:
   GET /verify3?source=0[&username=alice]
 
 Flow:
-  - Mỗi 1 giây: chụp frame → detect mặt
+  - Mỗi 1 giây: chụp frame → crop zone giữa → InsightFace trên crop
   - Có người + score >= threshold  → bắn verify_matched   + push socket
   - Có người + score <  threshold  → bắn verify_unmatched + push socket
   - Không có người (faces=[])      → bắn verify_no_face   (không push socket)
@@ -16,6 +16,8 @@ import cv2
 import asyncio
 import base64
 import json
+import time
+import functools
 from typing import Optional
 from datetime import datetime
 
@@ -31,11 +33,11 @@ from app.ws_producer import push_event_async
 
 router = APIRouter()
 
-MATCH_THRESHOLD   = 0.6   # score tối thiểu để xác thực thành công
-SCAN_INTERVAL     = 1.0   # giây giữa mỗi lần quét
+MATCH_THRESHOLD   = 0.45  # score tối thiểu để xác thực thành công
+SCAN_INTERVAL     = 0.5   # giây giữa mỗi lần quét
 PUSH_COOLDOWN_SEC = 10.0  # giây chờ giữa 2 lần push socket cho cùng 1 user
 
-# Zone nhận diện: chỉ xử lý mặt có tâm nằm trong vùng 200×300 ở giữa frame
+# Zone nhận diện: crop vùng 200×300 ở giữa frame rồi pass InsightFace
 ZONE_W = 200
 ZONE_H = 300
 
@@ -63,57 +65,74 @@ def _get_frame_fn(src):
     return lambda: (lambda ret, f: f if ret else None)(*cap.read()), cap
 
 
-def _face_in_zone(face, frame_h: int, frame_w: int) -> bool:
-    """Kiểm tra tâm bbox của face có nằm trong zone 300×400 giữa frame không."""
-    x1, y1, x2, y2 = face.bbox[:4]
-    cx = (x1 + x2) / 2
-    cy = (y1 + y2) / 2
-    zone_x1 = (frame_w - ZONE_W) / 2
-    zone_y1 = (frame_h - ZONE_H) / 2
-    zone_x2 = zone_x1 + ZONE_W
-    zone_y2 = zone_y1 + ZONE_H
-    return zone_x1 <= cx <= zone_x2 and zone_y1 <= cy <= zone_y2
-
-
 def _detect_and_match(frame, users, model):
     """
-    Detect mặt trong frame → chỉ xử lý mặt trong zone giữa → so sánh với tất cả users.
+    2-stage pipeline:
+      Stage 1 — Crop zone giữa (0ms)
+      Stage 2 — InsightFace embed + DB search trên crop (~200-400ms)
+
     Trả về (best_user, best_score, face_crop_b64) hoặc (None, 0.0, None).
     """
-    faces = model.get(frame)
-    if not faces:
-        return None, 0.0, None
+    t_pipeline_start = time.perf_counter()
 
+    # ── Stage 1: Crop zone giữa ────────────────────────────────
     frame_h, frame_w = frame.shape[:2]
+    zx1 = int((frame_w - ZONE_W) / 2)
+    zy1 = int((frame_h - ZONE_H) / 2)
+    zx2 = zx1 + ZONE_W
+    zy2 = zy1 + ZONE_H
+    # Clamp để tránh out-of-bounds
+    zx1 = max(0, zx1); zy1 = max(0, zy1)
+    zx2 = min(frame_w, zx2); zy2 = min(frame_h, zy2)
+    crop = frame[zy1:zy2, zx1:zx2]
+    print(f"[CROP] Zone ({zx1},{zy1})-({zx2},{zy2}) → crop shape={crop.shape}", flush=True)
 
-    # Lọc chỉ giữ mặt có tâm trong zone
-    faces = [f for f in faces if _face_in_zone(f, frame_h, frame_w)]
+    # ── Stage 2: InsightFace inference trên crop ──────────────
+    t_reco_start = time.perf_counter()
+    faces = model.get(crop)
+    t_reco_ms = (time.perf_counter() - t_reco_start) * 1000
+    print(
+        f"[DETECT] InsightFace inference {t_reco_ms:.1f}ms"
+        f" — detected {len(faces) if faces else 0} face(s) in crop",
+        flush=True,
+    )
     if not faces:
         return None, 0.0, None
 
-    # Chọn mặt lớn nhất trong zone
-    face = max(faces, key=lambda f: (f.bbox[2]-f.bbox[0])*(f.bbox[3]-f.bbox[1]))
+    # Chọn mặt lớn nhất trong crop
+    face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
 
-    # Lấy embedding
-    embedding, face_crop = embedding_from_faces(frame, [face])
+    # Lấy embedding từ crop
+    embedding, face_crop = embedding_from_faces(crop, [face])
     if embedding is None:
         return None, 0.0, None
 
-    # So sánh với DB
+    # ── DB search (RAM) ────────────────────────────────────────
+    t_search_start = time.perf_counter()
     best_score = 0.0
     best_user  = None
     for u in users:
         stored = bytes_to_embedding(u.face_embedding)
-        _, score = verify_faces(stored, embedding)
+        _, score = verify_faces(stored, embedding, label=u.username)
         if score > best_score:
             best_score = score
             best_user  = u
+    t_search_ms = (time.perf_counter() - t_search_start) * 1000
+    print(
+        f"[SEARCH] {len(users)} user(s) — {t_search_ms:.1f}ms"
+        f" — best: user={best_user.username if best_user else 'None'}"
+        f" score={best_score:.4f} → {'MATCHED ✅' if best_score >= MATCH_THRESHOLD else 'UNMATCHED ❌'}",
+        flush=True,
+    )
 
-    # Crop face base64
+    # Encode face crop → base64
     face_crop_b64 = None
     if face_crop is not None and face_crop.size > 0:
         _, crop_buf = cv2.imencode(".jpg", face_crop, [cv2.IMWRITE_JPEG_QUALITY, 85])
         face_crop_b64 = base64.b64encode(crop_buf.tobytes()).decode()
+
+    t_pipeline_ms = (time.perf_counter() - t_pipeline_start) * 1000
+    print(f"[VERIFY3] ── Total frame processing: {t_pipeline_ms:.1f}ms ──", flush=True)
 
     return best_user, round(best_score, 4), face_crop_b64
 
@@ -121,7 +140,10 @@ def _detect_and_match(frame, users, model):
 async def _verify_generator(source: str, username: Optional[str]):
     from app.face_utils import get_face_model
 
+    print(f"[VERIFY3] Generator started — source={source} username={username}", flush=True)
     src = _parse_source(source)
+    print(f"[VERIFY3] Parsed source → {src}", flush=True)
+
     # Cooldown tracker: username -> timestamp lần push cuối
     _last_push: dict[str, float] = {}
 
@@ -130,6 +152,7 @@ async def _verify_generator(source: str, username: Optional[str]):
     if username:
         query = User.find(User.username == username, User.face_embedding_b64 != None)  # noqa: E711
     users = await query.to_list()
+    print(f"[VERIFY3] Loaded {len(users)} user(s) from MongoDB", flush=True)
 
     if not users:
         yield _event({"error": "Không có khuôn mặt nào trong DB. Hãy đăng ký trước."})
@@ -141,9 +164,12 @@ async def _verify_generator(source: str, username: Optional[str]):
         return
 
     model = get_face_model()
+    print(f"[VERIFY3] Model loaded — entering scan loop (interval={SCAN_INTERVAL}s)", flush=True)
 
     try:
+        loop_count = 0
         while True:
+            loop_count += 1
             await asyncio.sleep(SCAN_INTERVAL)
 
             # ── Tạm dừng xác thực khi đang có phiên đăng ký ─────────
@@ -157,14 +183,28 @@ async def _verify_generator(source: str, username: Optional[str]):
                 })
                 continue
 
-            frame = get_frame()
+            # ── Lấy frame (non-blocking via executor) ────────────────
+            t_getframe_start = time.perf_counter()
+            loop = asyncio.get_event_loop()
+            try:
+                frame = await loop.run_in_executor(None, get_frame)
+            except Exception as ex:
+                print(f"[VERIFY3] get_frame() EXCEPTION: {ex}", flush=True)
+                continue
+            t_getframe_ms = (time.perf_counter() - t_getframe_start) * 1000
             if frame is None:
-                continue  # không có frame → im lặng, thử lại
+                print(f"[VERIFY3] get_frame() None ({t_getframe_ms:.1f}ms) — skipping", flush=True)
+                continue
+            print(f"[VERIFY3] get_frame() OK {t_getframe_ms:.1f}ms — shape={frame.shape}", flush=True)
 
-            # ── Detect + match ───────────────────────────────────────
-            best_user, best_score, face_crop_b64 = _detect_and_match(frame, users, model)
+            # ── Detect + match trên crop zone (executor) ─────────────
+            t_frame_start = time.perf_counter()
+            best_user, best_score, face_crop_b64 = await loop.run_in_executor(
+                None, functools.partial(_detect_and_match, frame, users, model)
+            )
+            t_total_ms = (time.perf_counter() - t_frame_start) * 1000
 
-            # Vẽ zone lên frame để hiển thị
+            # ── Vẽ zone lên full frame để preview ────────────────────
             fh, fw = frame.shape[:2]
             zx1 = int((fw - ZONE_W) / 2)
             zy1 = int((fh - ZONE_H) / 2)
@@ -175,28 +215,9 @@ async def _verify_generator(source: str, username: Optional[str]):
             cv2.putText(frame, "Dung vao day", (zx1, zy1 - 8),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, zone_color, 1)
 
-            # Không có mặt trong frame → bắn no_face, tiếp tục
-            if best_user is None and best_score == 0.0:
-                _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
-                yield _event({
-                    "phase":     "no_face",
-                    "event":     "verify_no_face",
-                    "source":    source,
-                    "timestamp": datetime.now().isoformat(),
-                    "frame_b64": base64.b64encode(buf.tobytes()).decode(),
-                    "message":   "Không phát hiện khuôn mặt",
-                })
-                continue
-
-            # Encode preview frame (chỉ khi cần gửi SSE)
-            _, buf    = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
-            frame_b64 = base64.b64encode(buf.tobytes()).decode()
-
-            matched   = best_score >= MATCH_THRESHOLD
-            ts        = datetime.now().isoformat()
-
-            import time
-            now_ts = time.monotonic()
+            matched = best_score >= MATCH_THRESHOLD
+            ts      = datetime.now().isoformat()
+            now_ts  = time.monotonic()
 
             if matched:
                 # ✅ Có người + thỏa mãn → luôn yield SSE, nhưng chỉ push socket nếu hết cooldown
@@ -205,59 +226,84 @@ async def _verify_generator(source: str, username: Optional[str]):
                     "event":         "verify_matched",
                     "type":          "face_recognition",
                     "username":      best_user.username,
-                    "position":      best_user.position or "",
-                    "expiry_date":   best_user.expiry_date.isoformat() if best_user.expiry_date else None,
                     "score":         best_score,
+                    "threshold":     MATCH_THRESHOLD,
                     "source":        source,
                     "timestamp":     ts,
                     "face_crop_b64": face_crop_b64,
                     "matched":       True,
-                    "message":       f"✅ Xác thực thành công: {best_user.username} ({best_score})",
                 }
-                yield _event({**event_data, "frame_b64": frame_b64})
+                _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
+                event_data["frame_b64"] = base64.b64encode(buf.tobytes()).decode()
+                yield _event(event_data)
 
-                # Push socket chỉ 1 lần mỗi PUSH_COOLDOWN_SEC giây / user
-                last = _last_push.get(best_user.username, 0.0)
+                last = _last_push.get(best_user.username, 0)
                 if now_ts - last >= PUSH_COOLDOWN_SEC:
                     _last_push[best_user.username] = now_ts
-                    asyncio.ensure_future(push_event_async(event_data))
+                    socket_data = {k: v for k, v in event_data.items() if k != "frame_b64"}
+                    asyncio.ensure_future(push_event_async(socket_data, event_type="face_recognition"))
 
-            else:
-                # ❌ Có người + không thỏa mãn → yield SSE + push socket (có cooldown)
+            elif best_user is not None:
+                # ❌ Có mặt nhưng score thấp
+                _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
                 event_data = {
-                    "phase":         "scanning",
+                    "phase":         "unmatched",
                     "event":         "verify_unmatched",
                     "type":          "face_recognition",
                     "username":      None,
-                    "matched":       False,
+                    "score":         best_score,
+                    "threshold":     MATCH_THRESHOLD,
                     "source":        source,
                     "timestamp":     ts,
+                    "frame_b64":     base64.b64encode(buf.tobytes()).decode(),
                     "face_crop_b64": face_crop_b64,
                 }
-                yield _event({**event_data, "frame_b64": frame_b64})
+                yield _event(event_data)
+                socket_data = {k: v for k, v in event_data.items() if k != "frame_b64"}
+                asyncio.ensure_future(push_event_async(socket_data, event_type="face_recognition"))
 
-                # Push socket với cooldown riêng cho unmatched
-                last_unmatched = _last_push.get("__unmatched__", 0.0)
-                if now_ts - last_unmatched >= PUSH_COOLDOWN_SEC:
-                    _last_push["__unmatched__"] = now_ts
-                    asyncio.ensure_future(push_event_async(event_data))
+            else:
+                # Không có mặt trong crop → bắn no_face
+                _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
+                yield _event({
+                    "phase":     "no_face",
+                    "event":     "verify_no_face",
+                    "source":    source,
+                    "timestamp": ts,
+                    "frame_b64": base64.b64encode(buf.tobytes()).decode(),
+                    "message":   "Không phát hiện khuôn mặt trong vùng nhận diện",
+                })
 
     except asyncio.CancelledError:
-        pass
-    except Exception as e:
-        yield _event({"error": str(e)})
+        print("[VERIFY3] Generator cancelled (client disconnected)", flush=True)
     finally:
         if cap is not None:
             cap.release()
 
 
-@router.get("/verify3", summary="Xác thực khuôn mặt liên tục — 1s/lần (SSE)")
-async def verify_continuous(
-    source: str = Query(default="0"),
-    username: Optional[str] = Query(None),
+@router.get(
+    "/verify3",
+    summary="SSE xác thực khuôn mặt liên tục — crop zone giữa → InsightFace",
+    description=(
+        "Stream SSE xác thực mặt mỗi giây.\n\n"
+        "**Pipeline:** crop zone 200×300 giữa frame → InsightFace embed → cosine search DB\n\n"
+        "**Events:**\n"
+        "- `verify_matched`   – khớp (score ≥ threshold)\n"
+        "- `verify_unmatched` – có mặt nhưng score thấp\n"
+        "- `verify_no_face`   – không phát hiện mặt trong zone\n"
+        "- `verify_paused`    – đang có phiên đăng ký\n\n"
+        "**source:** `0` = webcam local, `http://...` = MJPEG/snapshot, `rtsp://...` = RTSP stream"
+    ),
+)
+async def verify3(
+    source: str = Query("0", description="Nguồn video: 0/1 (camera), http://..., rtsp://..."),
+    username: Optional[str] = Query(None, description="Chỉ so sánh với user cụ thể"),
 ):
     return StreamingResponse(
         _verify_generator(source, username),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )

@@ -113,13 +113,18 @@ def fetch_snapshot_from_url(url: str, timeout: float = 2.0) -> Optional[np.ndarr
     """
     try:
         import urllib.request
+        print(f"[CAM] Fetching snapshot from {url}", flush=True)
         with urllib.request.urlopen(url, timeout=timeout) as resp:
             data = resp.read()
         arr = np.frombuffer(data, np.uint8)
         frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if frame is not None:
+            print(f"[CAM] Snapshot OK — shape={frame.shape}", flush=True)
+        else:
+            print(f"[CAM] Snapshot decode failed (empty frame)", flush=True)
         return frame if frame is not None else None
     except Exception as e:
-        print(f"[SNAPSHOT] Failed to fetch {url}: {e}")
+        print(f"[SNAPSHOT] Failed to fetch {url}: {e}", flush=True)
         return None
 
 

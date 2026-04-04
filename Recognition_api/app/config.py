@@ -22,9 +22,12 @@ class Settings(BaseSettings):
     MONGODB_PORT: int = 28017
 
     # InsightFace
-    INSIGHTFACE_MODEL: str = "buffalo_l"
-    FACE_THRESHOLD: float = 0.5
+    INSIGHTFACE_MODEL: str = "buffalo_s"
+    FACE_THRESHOLD: float = 0.45
     FACE_IMAGES_DIR: str = "./face_images"
+
+    # Finger Reader service (finger_reader module chạy trên port 8082)
+    FINGER_READER_URL: str = "http://localhost:8082"
 
     class Config:
         env_file = ".env"

@@ -57,23 +57,17 @@ async def verify_finger(
 
     if user is None:
         logger.info(f"[verify_finger] FAILED finger_not_found: finger_id={finger_id}")
-        fail_event = {
-            "event":      "verify_finger_failed",
-            "type":       "finger_verify",
-            "status":     "failed",
-            "finger_id":  finger_id,
-            "username":   None,
-            "position":   "",
-            "matched":    False,
-            "confidence": confidence,
-            "reason":     "finger_not_found",
-            "timestamp":  ts,
-            "message":    f"❌ Vân tay slot {finger_id} không tìm thấy trong hệ thống",
-        }
-        asyncio.ensure_future(push_event_async(fail_event, event_type="finger_verify"))
+        # Không push event — finger_not_found là nhiễu thường gặp khi quét vân tay chưa đăng ký
         return JSONResponse(
             status_code=404,
-            content={**fail_event},
+            content={
+                "event":      "verify_finger_failed",
+                "type":       "finger_verify",
+                "status":     "failed",
+                "matched":    False,
+                "reason":     "finger_not_found",
+                "timestamp":  ts,
+            },
         )
 
     # Kiểm tra hết hạn
@@ -88,37 +82,25 @@ async def verify_finger(
         expire_event = {
             "event":       "verify_finger_failed",
             "type":        "finger_verify",
-            "status":      "failed",
-            "finger_id":   finger_id,
+            "matched":     False,
+            "reason":      "expired",
             "username":    user.username,
             "position":    user.position or "",
             "expiry_date": user.expiry_date.isoformat() if user.expiry_date else None,
-            "matched":     False,
-            "confidence":  confidence,
-            "reason":      "expired",
             "timestamp":   ts,
-            "message":     f"❌ Vân tay của {user.username} đã hết hạn",
         }
         asyncio.ensure_future(push_event_async(expire_event, event_type="finger_verify"))
-        return JSONResponse(
-            status_code=403,
-            content={**expire_event},
-        )
+        return JSONResponse(status_code=403, content={**expire_event})
 
     # Xác thực thành công
     event_data = {
         "event":       "verify_finger_matched",
         "type":        "finger_verify",
-        "status":      "success",
-        "finger_id":   finger_id,
+        "matched":     True,
         "username":    user.username,
         "position":    user.position or "",
         "expiry_date": user.expiry_date.isoformat() if user.expiry_date else None,
-        "matched":     True,
-        "confidence":  confidence,
-        "reason":      "ok",
         "timestamp":   ts,
-        "message":     f"✅ Xác thực vân tay thành công: {user.username}",
     }
     asyncio.ensure_future(push_event_async(event_data, event_type="finger_verify"))
     logger.info(f"[verify_finger] MATCHED: finger_id={finger_id} → {user.username}")
@@ -130,8 +112,5 @@ async def verify_finger(
         "username":    user.username,
         "position":    user.position or "",
         "expiry_date": user.expiry_date.isoformat() if user.expiry_date else None,
-        "confidence":  confidence,
-        "reason":      "ok",
         "timestamp":   ts,
-        "message":     f"✅ Xác thực thành công: {user.username} ({user.position or 'N/A'})",
     }

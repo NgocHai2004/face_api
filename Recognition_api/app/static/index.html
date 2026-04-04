@@ -109,8 +109,9 @@
                  border: 2px solid #334155; text-align: center; }
   .status-cell .label { font-size: 0.72rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
   .status-cell .value { font-size: 1.1rem; font-weight: 700; margin-top: 6px; }
-  .status-cell.ok   { border-color: #22c55e; }
-  .status-cell.card { border-color: #0891b2; }
+  .status-cell.ok     { border-color: #22c55e; }
+  .status-cell.card   { border-color: #0891b2; }
+  .status-cell.finger { border-color: #7c3aed; }
 </style>
 </head>
 <body>
@@ -125,6 +126,7 @@
   <button class="tab-btn active" onclick="switchTab(event,'enroll')">🎯 Đăng ký 3 góc</button>
   <button class="tab-btn"        onclick="switchTab(event,'nfc')">🔐 Đăng ký NFC + Mặt</button>
   <button class="tab-btn"        onclick="switchTab(event,'verify')">🔍 Xác thực</button>
+  <button class="tab-btn"        onclick="switchTab(event,'finger')">🖐 Vân tay</button>
   <button class="tab-btn"        onclick="switchTab(event,'users');loadUsers()">👥 Quản lý User</button>
 </div>
 
@@ -190,7 +192,7 @@
 <div id="tab-nfc" class="tab-content">
   <div class="card">
     <p class="hint" style="font-size:0.82rem;color:#94a3b8;margin-bottom:6px">
-      💡 Đăng ký đồng thời <b>khuôn mặt 3 góc</b> + <b>thẻ NFC</b>. Chỉ cần 1 trong 2 để hoàn tất.
+      💡 Đăng ký đồng thời <b>khuôn mặt 3 góc</b> + <b>thẻ NFC</b> + <b>vân tay</b>. Chỉ cần 1 trong 3 để hoàn tất.
     </p>
 
     <label>Tên người dùng <span style="color:#ef4444">*</span></label>
@@ -212,7 +214,7 @@
     <div id="nfc-session-info" style="display:none;margin-top:16px">
 
       <!-- Status grid -->
-      <div class="status-grid">
+      <div class="status-grid" style="grid-template-columns: 1fr 1fr 1fr;">
         <div class="status-cell" id="nfc-face-cell">
           <div class="label">🎭 Khuôn mặt</div>
           <div class="value" id="nfc-face-val" style="color:#475569">0 / 3 góc</div>
@@ -221,11 +223,20 @@
           <div class="label">💳 Thẻ NFC</div>
           <div class="value" id="nfc-card-val" style="color:#475569">Chưa quét</div>
         </div>
+        <div class="status-cell" id="nfc-finger-cell">
+          <div class="label">🖐 Vân tay</div>
+          <div class="value" id="nfc-finger-val" style="color:#475569">Chưa quét</div>
+        </div>
       </div>
 
       <!-- NFC badge -->
       <div class="nfc-badge waiting" id="nfc-badge">
         💳 Chờ quét thẻ NFC (đặt thẻ lên đầu đọc)...
+      </div>
+
+      <!-- Finger badge -->
+      <div class="nfc-badge waiting" id="nfc-finger-badge">
+        🖐 Chờ quét vân tay (finger reader port 8082)...
       </div>
 
       <!-- Step badges -->
@@ -283,6 +294,10 @@
            background:#0f172a;border:1px solid #334155;font-size:0.85rem;color:#475569;display:inline-block">
         💳 Chờ quét thẻ...
       </div>
+      <div id="vr-finger-badge" style="padding:8px 16px;border-radius:8px;
+           background:#0f172a;border:1px solid #334155;font-size:0.85rem;color:#475569;display:inline-block">
+        🖐 Chờ quét vân tay...
+      </div>
     </div>
 
     <!-- Camera + face + card result -->
@@ -302,10 +317,65 @@
           <div style="font-size:.75rem;color:#64748b;margin-bottom:6px">💳 Thẻ từ</div>
           <div class="angle-card" id="vr-card-card" style="min-height:100px"><b>—</b></div>
         </div>
+        <div>
+          <div style="font-size:.75rem;color:#64748b;margin-bottom:6px">🖐 Vân tay</div>
+          <div class="angle-card" id="vr-finger-card" style="min-height:100px"><b>—</b></div>
+        </div>
       </div>
     </div>
 
     <div class="info-box" id="vr-info" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     TAB 5 — ĐĂNG KÝ VÂN TAY R305 (SSE qua finger_reader)
+══════════════════════════════════════════════════════════ -->
+<div id="tab-finger" class="tab-content">
+  <div class="card">
+    <p class="hint" style="font-size:0.82rem;color:#94a3b8;margin-bottom:10px">
+      🖐 Đăng ký vân tay R305 qua cảm biến. Yêu cầu <b>finger_reader service</b> đang chạy tại cổng <b>8082</b>.
+    </p>
+
+    <label>Tên người dùng <span style="color:#ef4444">*</span></label>
+    <input type="text" id="fp-username" placeholder="VD: nguyen_van_a"
+           onkeydown="if(event.key==='Enter')startFingerEnroll()" />
+
+    <label>Tên hiển thị</label>
+    <input type="text" id="fp-person-name" placeholder="VD: Nguyễn Văn A (để trống = dùng username)" />
+
+    <label>Timeout mỗi lần quét (giây)</label>
+    <input type="text" id="fp-timeout" value="60" placeholder="10–300" />
+    <p class="hint">Thời gian chờ đặt ngón tay lên cảm biến mỗi lần quét</p>
+
+    <div class="btn-row">
+      <button class="btn-green" id="fp-start-btn" onclick="startFingerEnroll()">🖐 Bắt đầu đăng ký</button>
+      <button class="btn-red"   id="fp-stop-btn"  onclick="stopFingerEnroll()" disabled>⏹ Huỷ</button>
+    </div>
+
+    <!-- Các bước tiến trình -->
+    <div class="steps" id="fp-steps" style="display:none;margin-top:16px">
+      <div class="step-badge" id="fp-s1">1️⃣ Quét lần 1</div>
+      <div class="step-badge" id="fp-s2">☝️ Nhấc tay</div>
+      <div class="step-badge" id="fp-s3">2️⃣ Quét lần 2</div>
+      <div class="step-badge" id="fp-s4">💾 Lưu sensor</div>
+      <div class="step-badge" id="fp-s5">☁️ Lưu DB</div>
+    </div>
+
+    <!-- Sensor animation -->
+    <div id="fp-sensor-wrap" style="display:none;margin-top:20px;text-align:center">
+      <div id="fp-sensor-icon" style="font-size:5rem;line-height:1;transition:all .3s">🖐</div>
+      <div id="fp-sensor-msg" style="font-size:0.92rem;color:#94a3b8;margin-top:10px"></div>
+    </div>
+
+    <!-- Kết quả -->
+    <div id="fp-result" style="display:none;margin-top:16px;background:#0f172a;border-radius:12px;padding:18px;border:2px solid #334155;text-align:center">
+      <div id="fp-result-icon" style="font-size:3rem">🖐</div>
+      <div id="fp-result-name" style="font-size:1.1rem;font-weight:700;margin-top:8px;color:#e2e8f0"></div>
+      <div id="fp-result-slot" style="font-size:0.82rem;color:#64748b;margin-top:4px"></div>
+    </div>
+
+    <div class="info-box" id="fp-info" style="margin-top:14px"></div>
   </div>
 </div>
 
@@ -354,13 +424,14 @@
           <th>Chức vụ</th>
           <th>Khuôn mặt</th>
           <th>💳 Thẻ NFC</th>
+          <th>🖐 Vân tay</th>
           <th>Ngày hết hạn</th>
           <th>Ngày tạo</th>
           <th></th>
         </tr>
       </thead>
       <tbody id="user-tbody">
-        <tr><td colspan="8" style="color:#64748b;padding:16px">Nhấn 🔄 để tải danh sách</td></tr>
+        <tr><td colspan="9" style="color:#64748b;padding:16px">Nhấn 🔄 để tải danh sách</td></tr>
       </tbody>
     </table>
     </div>
@@ -519,9 +590,11 @@
   let nfcActive    = false;
   let nfcAngles    = {};     // { THANG: bool, TRAI: bool, PHAI: bool }
   let nfcCardId    = null;
+  let nfcFingerId  = null;   // int khi đã quét vân tay
   let nfcUsername  = null;
   // NFC module base URL (same hostname, port 8080)
-  const NFC_MODULE_URL = `http://${location.hostname}:8080`;
+  const NFC_MODULE_URL    = `http://${location.hostname}:8080`;
+  const FINGER_MODULE_URL = `http://${location.hostname}:8082`;
 
   function _nfcSetInfo(msg, cls='') {
     const el = document.getElementById('nfc-info');
@@ -554,8 +627,24 @@
       cardCell.classList.remove('card');
     }
 
+    // Finger status
+    const fingerCell  = document.getElementById('nfc-finger-cell');
+    const fingerVal   = document.getElementById('nfc-finger-val');
+    const fingerBadge = document.getElementById('nfc-finger-badge');
+    if (nfcFingerId !== null) {
+      fingerVal.textContent = `Slot ${nfcFingerId}`;
+      fingerVal.style.color = '#a78bfa';
+      fingerCell.classList.add('finger');
+      fingerBadge.className = 'nfc-badge done';
+      fingerBadge.innerHTML = `🖐 Vân tay đã quét: <b>slot ${nfcFingerId}</b>`;
+    } else {
+      fingerVal.textContent = 'Chưa quét';
+      fingerVal.style.color = '#475569';
+      fingerCell.classList.remove('finger');
+    }
+
     // Enable finish button if at least one condition met
-    const ready = faceCount === 3 || nfcCardId !== null;
+    const ready = faceCount === 3 || nfcCardId !== null || nfcFingerId !== null;
     document.getElementById('nfc-finish-btn').disabled = !ready || !nfcActive;
   }
 
@@ -570,6 +659,7 @@
     // Reset state
     nfcAngles   = {};
     nfcCardId   = null;
+    nfcFingerId = null;
     nfcUsername = username;
     nfcActive   = true;
 
@@ -582,6 +672,8 @@
     });
     document.getElementById('nfc-badge').className = 'nfc-badge waiting';
     document.getElementById('nfc-badge').innerHTML = '💳 Chờ quét thẻ NFC (đặt thẻ lên đầu đọc)...';
+    document.getElementById('nfc-finger-badge').className = 'nfc-badge waiting';
+    document.getElementById('nfc-finger-badge').innerHTML = `🖐 Chờ quét vân tay (${FINGER_MODULE_URL})...`;
     document.getElementById('nfc-ph').style.display = 'flex';
     document.getElementById('nfc-frame').style.display = 'none';
     document.getElementById('nfc-session-info').style.display = 'block';
@@ -681,6 +773,9 @@
 
     // Step 3: Connect SSE to NFC module — chờ quét thẻ, tự reconnect khi hết timeout
     _nfcConnectCardSSE(username);
+
+    // Step 4: Connect SSE to Finger reader — chờ quét vân tay, tự reconnect
+    _nfcConnectFingerSSE(username);
   }
 
   // Dùng fetch+ReadableStream thay vì EventSource để kiểm soát reconnect hoàn toàn
@@ -803,6 +898,115 @@
     })();
   }
 
+  function _nfcConnectFingerSSE(username) {
+    if (!nfcActive || nfcFingerId !== null) return;
+
+    let _done = false;
+
+    const fingerUrl = `${FINGER_MODULE_URL}/api/enroll/scan?username=${encodeURIComponent(username)}&timeout=90`;
+
+    (async () => {
+      try {
+        const resp = await fetch(fingerUrl);
+        if (!resp.ok || !resp.body) {
+          if (nfcActive && nfcFingerId === null) setTimeout(() => _nfcConnectFingerSSE(username), 3000);
+          return;
+        }
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop();
+
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            let d;
+            try { d = JSON.parse(line.slice(5).trim()); } catch(e) { continue; }
+
+            if (d.event === 'waiting') {
+              document.getElementById('nfc-finger-badge').className = 'nfc-badge scanned';
+              document.getElementById('nfc-finger-badge').innerHTML = `🖐 Đặt ngón tay lên cảm biến lần 1...`;
+            }
+            if (d.event === 'lift_finger') {
+              document.getElementById('nfc-finger-badge').innerHTML = `🖐 ☝️ Nhấc ngón tay ra...`;
+            }
+            if (d.event === 'finger_placed') {
+              const stepMsg = d.step === 2
+                ? `🖐 ✅ Đã đọc lần 2 — đang lưu...`
+                : `🖐 ✅ Đã đọc lần 1 — nhấc tay ra...`;
+              document.getElementById('nfc-finger-badge').innerHTML = stepMsg;
+            }
+            if (d.event === 'second_scan_required') {
+              document.getElementById('nfc-finger-badge').innerHTML = `🖐 Đặt lại ngón tay lần 2...`;
+            }
+            if (d.event === 'storing') {
+              document.getElementById('nfc-finger-badge').innerHTML = `🖐 💾 Đang lưu vân tay vào sensor...`;
+            }
+
+            if (d.event === 'enrolled') {
+              const fid = d.finger_id ?? d.slot ?? null;
+              document.getElementById('nfc-finger-badge').innerHTML = `🖐 ✅ Đã lưu sensor — đang đăng ký DB...`;
+              // Gọi API lưu vào NFC session (không await để không block stream)
+              const _fid = fid;
+              fetch(
+                `/enroll/nfc/finger?username=${encodeURIComponent(username)}&finger_id=${_fid}`,
+                { method: 'POST' }
+              ).catch(() => {});
+              if (_fid != null) {
+                nfcFingerId = _fid;
+                _nfcUpdateStatus();
+                _nfcSetInfo(`🖐 Vân tay slot ${_fid} đã lưu vào session!`, 'ok');
+              }
+              _done = true;
+              reader.cancel();
+              return;
+            }
+
+            if (d.event === 'registered') {
+              // finger_reader đã tự gọi /enroll/nfc/finger — update UI nếu chưa có
+              const fid = d.finger_id ?? d.slot ?? null;
+              if (nfcFingerId === null && fid != null) {
+                nfcFingerId = fid;
+                _nfcUpdateStatus();
+                _nfcSetInfo(`🖐 Vân tay slot ${fid} đã đăng ký thành công!`, 'ok');
+              }
+              _done = true;
+              reader.cancel();
+              return;
+            }
+
+            if (['register_error','timeout','error'].includes(d.event)) {
+              _done = true;
+              reader.cancel();
+              if (d.event === 'timeout' && nfcActive && nfcFingerId === null) {
+                setTimeout(() => _nfcConnectFingerSSE(username), 300);
+              }
+              return;
+            }
+
+            if (d.event === 'busy') {
+              reader.cancel();
+              if (nfcActive && nfcFingerId === null) setTimeout(() => _nfcConnectFingerSSE(username), 2000);
+              return;
+            }
+          }
+        }
+
+        if (!_done && nfcActive && nfcFingerId === null) {
+          setTimeout(() => _nfcConnectFingerSSE(username), 500);
+        }
+      } catch(e) {
+        if (_done || e.name === 'AbortError') return;
+        if (nfcActive && nfcFingerId === null) setTimeout(() => _nfcConnectFingerSSE(username), 3000);
+      }
+    })();
+  }
+
   async function nfcFinish() {
     if (!nfcUsername) return;
     document.getElementById('nfc-finish-btn').disabled = true;
@@ -814,8 +1018,9 @@
 
       if (res.ok && data.success) {
         const modes = [];
-        if (data.face_ok) modes.push(`khuôn mặt ${(data.angles_captured||[]).map(a=>LABEL[a]).join('+')||'3 góc'}`);
-        if (data.card_ok) modes.push(`thẻ NFC <b>${data.card_id}</b>`);
+        if (data.face_ok)   modes.push(`khuôn mặt ${(data.angles_captured||[]).map(a=>LABEL[a]).join('+')||'3 góc'}`);
+        if (data.card_ok)   modes.push(`thẻ NFC <b>${data.card_id}</b>`);
+        if (data.finger_ok) modes.push(`vân tay slot <b>${data.finger_id}</b>`);
         const expiryStr = data.expiry_date ? `<br>📅 Hết hạn: ${data.expiry_date.substring(0,10)}` : '';
         _nfcSetInfo(
           `✅ <b>Đăng ký thành công!</b><br>` +
@@ -829,13 +1034,19 @@
         document.getElementById('nfc-badge').innerHTML = data.card_ok
           ? `💳 Thẻ đã đăng ký: <b>${data.card_id}</b>`
           : '💳 Không có thẻ NFC';
+        // Mark finger badge as done
+        document.getElementById('nfc-finger-badge').className = 'nfc-badge done';
+        document.getElementById('nfc-finger-badge').innerHTML = data.finger_ok
+          ? `🖐 Vân tay đã đăng ký: slot <b>${data.finger_id}</b>`
+          : '🖐 Không có vân tay';
       } else {
         const missing = (data.missing_angles||[]).map(a=>LABEL[a]).join(', ');
         _nfcSetInfo(
           `❌ <b>Chưa đủ điều kiện:</b><br>` +
           `🎭 Khuôn mặt: ${data.face_ok ? '✅' : `❌ (còn thiếu: ${missing})`}<br>` +
           `💳 Thẻ NFC: ${data.card_ok ? '✅' : '❌ Chưa quét'}<br>` +
-          `→ Cần ít nhất 1 trong 2 để hoàn tất.`,
+          `🖐 Vân tay: ${data.finger_ok ? '✅' : '❌ Chưa quét'}<br>` +
+          `→ Cần ít nhất 1 trong 3 (mặt/thẻ/vân tay) để hoàn tất.`,
           'err'
         );
         document.getElementById('nfc-finish-btn').disabled = false;
@@ -867,8 +1078,12 @@
     nfcActive   = false;
     nfcAngles   = {};
     nfcCardId   = null;
+    nfcFingerId = null;
     _nfcAbortCardSSE();
     if (clearForm) nfcUsername = null;
+    // Reset finger badge
+    const fb = document.getElementById('nfc-finger-badge');
+    if (fb) { fb.className = 'nfc-badge waiting'; fb.innerHTML = '🖐 Chờ quét vân tay (finger reader port 8082)...'; }
     document.getElementById('nfc-start-btn').disabled  = false;
     document.getElementById('nfc-finish-btn').disabled = true;
     document.getElementById('nfc-cancel-btn').disabled = true;
@@ -877,9 +1092,10 @@
   // ══════════════════════════════════════════════════════════
   // TAB 3 — XÁC THỰC — KHUÔN MẶT 1s/lần + THẺ TỪ SONG SONG
   // ══════════════════════════════════════════════════════════
-  let verifyES      = null;   // face SSE
-  let verifyCardES  = null;   // card SSE (AbortController)
-  let verifyRunning = false;
+  let verifyES        = null;   // face SSE
+  let verifyCardES    = null;   // card SSE (AbortController)
+  let verifyFingerES  = null;   // finger SSE (AbortController)
+  let verifyRunning   = false;
 
   function _onTabVerify() {
     if (!verifyRunning) _startVerifySystem();
@@ -890,12 +1106,14 @@
     document.getElementById('vr-stop').disabled = false;
     _connectVerifySSE();
     _connectVerifyCardSSE();
+    _connectVerifyFingerSSE();
   }
 
   function stopVerifySystem() {
     verifyRunning = false;
-    if (verifyES) { verifyES.close(); verifyES = null; }
-    if (verifyCardES) { try { verifyCardES.abort(); } catch(e){} verifyCardES = null; }
+    if (verifyES)       { verifyES.close(); verifyES = null; }
+    if (verifyCardES)   { try { verifyCardES.abort(); }   catch(e){} verifyCardES   = null; }
+    if (verifyFingerES) { try { verifyFingerES.abort(); } catch(e){} verifyFingerES = null; }
     _vrSetPhase('stopped');
     document.getElementById('vr-stop').disabled = true;
     document.getElementById('vr-info').textContent = '⏹ Hệ thống đã dừng';
@@ -903,6 +1121,101 @@
     document.getElementById('vr-card-badge').textContent = '💳 Đã dừng';
     document.getElementById('vr-card-badge').style.borderColor = '#334155';
     document.getElementById('vr-card-badge').style.color = '#475569';
+    document.getElementById('vr-finger-badge').textContent = '🖐 Đã dừng';
+    document.getElementById('vr-finger-badge').style.borderColor = '#334155';
+    document.getElementById('vr-finger-badge').style.color = '#475569';
+    document.getElementById('vr-finger-card').className = 'angle-card';
+    document.getElementById('vr-finger-card').innerHTML = '<b>—</b>';
+  }
+
+  function _connectVerifyFingerSSE() {
+    if (!verifyRunning) return;
+    const ctrl = new AbortController();
+    verifyFingerES = ctrl;
+    const fingerUrl = `${FINGER_MODULE_URL}/api/verify/scan`;
+
+    const badge      = document.getElementById('vr-finger-badge');
+    const fingerCard = document.getElementById('vr-finger-card');
+    badge.textContent       = '🖐 Chờ quét vân tay...';
+    badge.style.borderColor = '#334155';
+    badge.style.color       = '#475569';
+
+    (async () => {
+      try {
+        const resp = await fetch(fingerUrl, { signal: ctrl.signal });
+        if (!resp.ok || !resp.body) {
+          if (verifyRunning) setTimeout(_connectVerifyFingerSSE, 5000);
+          return;
+        }
+        const reader  = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop();
+
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            let d;
+            try { d = JSON.parse(line.slice(5).trim()); } catch(e) { continue; }
+
+            if (d.event === 'keepalive' || d.event === 'waiting') continue;
+
+            if (d.event === 'finger_detected') {
+              badge.textContent       = '🖐 ⏳ Đang đọc...';
+              badge.style.borderColor = '#f59e0b';
+              badge.style.color       = '#fbbf24';
+            }
+
+            if (d.event === 'finger_verified') {
+              const matched = d.matched;
+              if (matched) {
+                badge.textContent       = `🖐 ✅ ${d.username}`;
+                badge.style.borderColor = '#22c55e';
+                badge.style.color       = '#86efac';
+                fingerCard.className    = 'angle-card ok';
+                fingerCard.innerHTML    =
+                  `<b style="color:#4ade80">✅ ${d.username}</b>` +
+                  `<br><span style="color:#a78bfa;font-size:.75rem">🖐 slot ${d.finger_id}</span>` +
+                  `<br><span style="color:#94a3b8;font-size:.75rem">${d.position || ''}</span>`;
+                document.getElementById('vr-info').innerHTML =
+                  `🖐 <b>Xác thực vân tay thành công!</b><br>👤 ${d.username} (${d.position || 'N/A'}) — slot ${d.finger_id}`;
+                document.getElementById('vr-info').className = 'info-box ok';
+              } else {
+                badge.textContent       = `🖐 ❌ Không khớp`;
+                badge.style.borderColor = '#ef4444';
+                badge.style.color       = '#fca5a5';
+                fingerCard.className    = 'angle-card err';
+                fingerCard.innerHTML    =
+                  `<b style="color:#f87171">❌ ${d.reason === 'finger_not_found' ? 'Không tìm thấy' : d.reason === 'expired' ? 'Hết hạn' : 'Từ chối'}</b>` +
+                  `<br><span style="color:#94a3b8;font-size:.75rem">🖐 slot ${d.finger_id ?? '?'}</span>`;
+                document.getElementById('vr-info').innerHTML =
+                  `🖐 ❌ ${d.message || 'Xác thực vân tay thất bại'}`;
+                document.getElementById('vr-info').className = 'info-box err';
+              }
+              // Reset sau 3s
+              setTimeout(() => {
+                if (!verifyRunning) return;
+                badge.textContent       = '🖐 Chờ quét vân tay...';
+                badge.style.borderColor = '#334155';
+                badge.style.color       = '#475569';
+                fingerCard.className    = 'angle-card';
+                fingerCard.innerHTML    = '<b>—</b>';
+              }, 3000);
+            }
+          }
+        }
+        // Stream đóng → reconnect
+        if (verifyRunning) setTimeout(_connectVerifyFingerSSE, 1000);
+      } catch(e) {
+        if (e.name === 'AbortError') return;
+        if (verifyRunning) setTimeout(_connectVerifyFingerSSE, 5000);
+      }
+    })();
   }
 
   function _connectVerifySSE() {
@@ -1088,6 +1401,212 @@
   }
 
   // ══════════════════════════════════════════════════════════
+  // TAB 5 — ĐĂNG KÝ VÂN TAY R305
+  // ══════════════════════════════════════════════════════════
+  let fingerES  = null;
+  let fingerCtrl = null;   // AbortController cho fetch SSE
+
+  const FP_STEPS = {
+    waiting:              { step: 1, label: '⏳ Đặt ngón tay lần 1...' },
+    finger_placed:        { step: 2, label: '✅ Đã đọc lần 1 — nhấc tay' },
+    lift_finger:          { step: 2, label: '☝️ Nhấc ngón tay ra' },
+    second_scan_required: { step: 3, label: '⏳ Đặt ngón tay lần 2...' },
+    storing:              { step: 4, label: '💾 Đang lưu vào sensor...' },
+    enrolled:             { step: 4, label: '✅ Lưu sensor thành công' },
+    registered:           { step: 5, label: '✅ Đã lưu vào DB' },
+  };
+
+  function _fpSetStep(active) {
+    const ids = ['fp-s1','fp-s2','fp-s3','fp-s4','fp-s5'];
+    ids.forEach((id, i) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.className = 'step-badge' + (i + 1 < active ? ' done' : i + 1 === active ? ' active' : '');
+    });
+  }
+
+  function _fpSetInfo(msg, type) {
+    const el = document.getElementById('fp-info');
+    el.innerHTML  = msg;
+    el.className  = 'info-box' + (type === 'ok' ? ' ok' : type === 'err' ? ' err' : '');
+  }
+
+  function _fpSetSensor(icon, msg, color) {
+    document.getElementById('fp-sensor-wrap').style.display = 'block';
+    document.getElementById('fp-sensor-icon').textContent   = icon;
+    document.getElementById('fp-sensor-icon').style.filter  = '';
+    document.getElementById('fp-sensor-msg').textContent    = msg;
+    document.getElementById('fp-sensor-msg').style.color    = color || '#94a3b8';
+  }
+
+  function _fpShowResult(success, username, fingerId) {
+    const wrap = document.getElementById('fp-result');
+    wrap.style.display = 'block';
+    wrap.style.borderColor = success ? '#22c55e' : '#ef4444';
+    document.getElementById('fp-result-icon').textContent = success ? '✅' : '❌';
+    document.getElementById('fp-result-name').textContent = success
+      ? `Đăng ký thành công: ${username}` : `Đăng ký thất bại`;
+    document.getElementById('fp-result-slot').textContent = success && fingerId >= 0
+      ? `Slot R305: #${fingerId}` : '';
+    document.getElementById('fp-result-name').style.color = success ? '#4ade80' : '#f87171';
+  }
+
+  async function startFingerEnroll() {
+    const username   = document.getElementById('fp-username').value.trim();
+    const personName = document.getElementById('fp-person-name').value.trim();
+    const timeout    = parseInt(document.getElementById('fp-timeout').value.trim()) || 60;
+
+    if (!username) { alert('Nhập tên người dùng'); return; }
+
+    // Reset UI
+    document.getElementById('fp-steps').style.display  = 'flex';
+    document.getElementById('fp-result').style.display = 'none';
+    document.getElementById('fp-sensor-wrap').style.display = 'block';
+    _fpSetStep(1);
+    _fpSetInfo('⏳ Đang kết nối cảm biến R305...', '');
+    _fpSetSensor('🖐', 'Đặt ngón tay lên cảm biến lần 1...', '#94a3b8');
+
+    document.getElementById('fp-start-btn').disabled = true;
+    document.getElementById('fp-stop-btn').disabled  = false;
+
+    // Dùng fetch + ReadableStream thay vì EventSource (vì cần AbortController)
+    fingerCtrl = new AbortController();
+    const url = `/enroll/finger/scan?username=${encodeURIComponent(username)}`
+              + `&person_name=${encodeURIComponent(personName)}`
+              + `&timeout=${timeout}`;
+
+    let lastFingerIdFromEvent = -1;
+
+    try {
+      const resp = await fetch(url, { signal: fingerCtrl.signal });
+      if (!resp.ok || !resp.body) {
+        _fpSetInfo(`❌ Lỗi kết nối: HTTP ${resp.status}`, 'err');
+        _fpDone(false);
+        return;
+      }
+
+      const reader  = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          let d;
+          try { d = JSON.parse(line.slice(5).trim()); } catch(e) { continue; }
+
+          const evt = d.event || '';
+          if (evt === 'keepalive') continue;
+
+          // --- Xử lý từng event ---
+          if (evt === 'waiting') {
+            const step = d.step === 2 ? 3 : 1;
+            _fpSetStep(step);
+            _fpSetSensor('🖐', d.message || 'Đặt ngón tay lên cảm biến...', '#60a5fa');
+            _fpSetInfo(`⏳ ${d.message || ''}`, '');
+
+          } else if (evt === 'finger_placed') {
+            const step = d.step === 2 ? 4 : 2;
+            _fpSetStep(step);
+            const icon = d.step === 2 ? '✅' : '☝️';
+            const color = d.step === 2 ? '#4ade80' : '#fbbf24';
+            _fpSetSensor(icon, d.message || 'Đã đọc. Nhấc tay ra...', color);
+            _fpSetInfo(`✅ ${d.message || ''}`, '');
+
+          } else if (evt === 'lift_finger') {
+            _fpSetStep(2);
+            _fpSetSensor('☝️', d.message || 'Nhấc ngón tay ra...', '#fbbf24');
+            _fpSetInfo(`☝️ ${d.message || ''}`, '');
+
+          } else if (evt === 'second_scan_required') {
+            _fpSetStep(3);
+            _fpSetSensor('🖐', d.message || 'Đặt lại ngón tay lần 2...', '#60a5fa');
+            _fpSetInfo(`⏳ ${d.message || ''}`, '');
+
+          } else if (evt === 'storing') {
+            _fpSetStep(4);
+            _fpSetSensor('💾', d.message || 'Đang lưu vào sensor...', '#a78bfa');
+            _fpSetInfo(`💾 ${d.message || ''}`, '');
+
+          } else if (evt === 'enrolled') {
+            _fpSetStep(4);
+            lastFingerIdFromEvent = d.finger_id ?? -1;
+            _fpSetSensor('✅', d.message || 'Đã lưu vào sensor!', '#4ade80');
+            _fpSetInfo(`✅ ${d.message || ''}`, '');
+
+          } else if (evt === 'registered') {
+            _fpSetStep(5);
+            const fid = d.finger_id ?? lastFingerIdFromEvent;
+            _fpSetSensor('🎉', `Đã đăng ký thành công! Slot: #${fid}`, '#4ade80');
+            _fpSetInfo(
+              `✅ <b>Đăng ký vân tay thành công!</b><br>👤 ${d.username} — Slot R305: <b>#${fid}</b>`,
+              'ok'
+            );
+            _fpShowResult(true, d.username, fid);
+            _fpDone(true);
+            return;
+
+          } else if (evt === 'register_error') {
+            const fid = d.finger_id ?? lastFingerIdFromEvent;
+            _fpSetSensor('⚠️', 'Lưu sensor OK nhưng lỗi ghi DB', '#fbbf24');
+            _fpSetInfo(
+              `⚠️ Lưu sensor thành công (slot #${fid}) nhưng lỗi ghi lên DB:<br>${d.error || ''}`,
+              'err'
+            );
+            _fpShowResult(false, '', fid);
+            _fpDone(false);
+            return;
+
+          } else if (evt === 'error') {
+            _fpSetSensor('❌', d.message || 'Lỗi không xác định', '#f87171');
+            _fpSetInfo(`❌ ${d.message || 'Lỗi không xác định'}`, 'err');
+            _fpShowResult(false, '', -1);
+            _fpDone(false);
+            return;
+          }
+        }
+      }
+
+      // Stream kết thúc mà không có registered/error → coi là timeout
+      _fpSetInfo('⏱ Hết thời gian chờ. Vui lòng thử lại.', 'err');
+      _fpSetSensor('⏱', 'Hết thời gian', '#f87171');
+      _fpDone(false);
+
+    } catch(e) {
+      if (e.name === 'AbortError') return;   // người dùng nhấn Huỷ
+      _fpSetInfo(`❌ Lỗi kết nối: ${e.message}`, 'err');
+      _fpSetSensor('❌', 'Mất kết nối', '#f87171');
+      _fpDone(false);
+    }
+  }
+
+  function stopFingerEnroll() {
+    if (fingerCtrl) { fingerCtrl.abort(); fingerCtrl = null; }
+    _fpSetInfo('⏹ Đã huỷ đăng ký vân tay.', '');
+    _fpSetSensor('⏹', 'Đã huỷ', '#475569');
+    _fpDone(false);
+  }
+
+  function _fpDone(success) {
+    fingerCtrl = null;
+    document.getElementById('fp-start-btn').disabled = false;
+    document.getElementById('fp-stop-btn').disabled  = true;
+    if (success) {
+      const ids = ['fp-s1','fp-s2','fp-s3','fp-s4','fp-s5'];
+      ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.className = 'step-badge done';
+      });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
   // TAB 4 — QUẢN LÝ USER
   // ══════════════════════════════════════════════════════════
   async function loadUsers() {
@@ -1108,6 +1627,9 @@
         const cardId = u.card_id
           ? `<span style="color:#67e8f9;font-family:monospace;font-size:.8rem">💳 ${u.card_id}</span>`
           : '<span style="color:#475569">—</span>';
+        const fingerId = u.finger_id != null
+          ? `<span style="color:#a78bfa;font-family:monospace;font-size:.8rem">🖐 slot ${u.finger_id}</span>`
+          : '<span style="color:#475569">—</span>';
         return `
         <tr>
           <td style="font-size:.75rem;color:#475569">${(u.id||'').substring(0,8)}…</td>
@@ -1118,6 +1640,7 @@
             ${u.has_face ? '✅ Có' : '❌ Chưa'}
           </td>
           <td>${cardId}</td>
+          <td>${fingerId}</td>
           <td style="color:${expiryColor};font-size:0.82rem">${expiry}</td>
           <td style="color:#64748b;font-size:0.78rem">${u.created_at ? u.created_at.replace('T',' ').substring(0,19) : '—'}</td>
           <td style="display:flex;gap:6px;white-space:nowrap">
